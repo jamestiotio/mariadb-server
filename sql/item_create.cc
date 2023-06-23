@@ -2638,7 +2638,11 @@ Create_qfunc::create_func(THD *thd, const LEX_CSTRING *name,
   if (thd->lex->copy_db_to(&db))
     return NULL;
 
-  return create_with_db(thd, &db, name, false, item_list);
+  LEX_CSTRING dbn= lower_case_table_names ? thd->make_ident_casedn(db) : db;
+  if (!dbn.str)
+    return NULL; /*EOM*/
+
+  return create_with_db(thd, &dbn, name, false, item_list);
 }
 
 

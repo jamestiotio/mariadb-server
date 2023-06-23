@@ -2539,6 +2539,37 @@ static void push_new_user(const ACL_USER &user)
 }
 
 
+/**
+  Make a database name on mem_root from a String,
+  apply lower-case conversion if lower_case_table_names says so.
+  Perform database name length limit validation.
+
+  @param thd      - the THD, to get the warning text from
+  @param mem_root - allocate the result on this memory root
+  @param dbstr    - the String, e.g. with Field::val_str() result
+
+  @return         - {NULL,0} in case of EOM or a bad database name,
+                    or a good database name otherwise.
+*/
+static LEX_STRING make_and_check_db_name(THD *thd, MEM_ROOT *mem_root,
+                                         const String &dbstr)
+{
+  LEX_STRING dbls= lower_case_table_names ?
+                   lex_string_casedn_root(mem_root, files_charset_info,
+                                          dbstr.ptr(), dbstr.length()) :
+                   lex_string_strmake_root(mem_root,
+                                           dbstr.ptr(), dbstr.length());
+  if (!dbls.str)
+    return LEX_STRING{NULL, 0}; // EOM
+  if (dbls.length > SAFE_NAME_LEN)
+  {
+    sql_print_warning(ER_THD(thd, ER_WRONG_DB_NAME), dbls.str);
+    return LEX_STRING{NULL, 0}; // Bad name
+  }
+  return dbls; // Good name
+}
+
+
 /*
   Initialize structures responsible for user/db-level privilege checking
   and load information about grants from open privilege tables.
@@ -2558,7 +2589,6 @@ static void push_new_user(const ACL_USER &user)
 static bool acl_load(THD *thd, const Grant_tables& tables)
 {
   READ_RECORD read_record_info;
-  char tmp_name[SAFE_NAME_LEN+1];
   Sql_mode_save old_mode_save(thd);
   DBUG_ENTER("acl_load");
 
@@ -2576,28 +2606,25 @@ static bool acl_load(THD *thd, const Grant_tables& tables)
     {
       ACL_HOST host;
       update_hostname(&host.host, get_field(&acl_memroot, host_table.host()));
-      host.db= get_field(&acl_memroot, host_table.db());
-      if (lower_case_table_names && host.db)
+      StringBuffer<SAFE_NAME_LEN> dbstr;
+      host_table.db()->val_str(&dbstr);
+      if (dbstr.length())
       {
+        const LEX_STRING dbls= make_and_check_db_name(thd, &acl_memroot, dbstr);
+        if (!(host.db= dbls.str))
+          continue; // EOM or a bad database name
         /*
-          convert db to lower case and give a warning if the db wasn't
-          already in lower case
+          Issue a warning if lower case conversion happened
+          and it changed the database name.
         */
-        char *end = strnmov(tmp_name, host.db, sizeof(tmp_name));
-        if (end >= tmp_name + sizeof(tmp_name))
-        {
-          sql_print_warning(ER_THD(thd, ER_WRONG_DB_NAME), host.db);
-          continue;
-        }
-        my_casedn_str(files_charset_info, host.db);
-        if (strcmp(host.db, tmp_name) != 0)
+        if (lower_case_table_names && cmp(dbls, dbstr.to_lex_cstring()))
           sql_print_warning("'host' entry '%s|%s' had database in mixed "
                             "case that has been forced to lowercase because "
                             "lower_case_table_names is set. It will not be "
                             "possible to remove this privilege using REVOKE.",
                             host.host.hostname, host.db);
       }
-      else if (!host.db)
+      else
         host.db= const_cast<char*>(host_not_specified.str);
       host.access= host_table.get_access();
       host.access= fix_rights_for_db(host.access);
@@ -2724,18 +2751,35 @@ static bool acl_load(THD *thd, const Grant_tables& tables)
   while (!(read_record_info.read_record()))
   {
     ACL_DB db;
-    char *db_name;
     db.user=safe_str(get_field(&acl_memroot, db_table.user()));
     const char *hostname= get_field(&acl_memroot, db_table.host());
     if (!hostname && find_acl_role(db.user, true))
       hostname= "";
     update_hostname(&db.host, hostname);
-    db.db= db_name= get_field(&acl_memroot, db_table.db());
-    if (!db.db)
+
+    StringBuffer<SAFE_NAME_LEN> dbstr;
+    db_table.db()->val_str(&dbstr);
+    if (!dbstr.length())
     {
       sql_print_warning("Found an entry in the 'db' table with empty database name; Skipped");
       continue;
     }
+    const LEX_STRING dbls= make_and_check_db_name(thd, &acl_memroot, dbstr);
+    if (!(db.db= dbls.str)) // EOM or a bad database name
+      continue;
+    /*
+      Issue a warning if lower case conversion happened
+      and it changed the database name.
+    */
+    if (lower_case_table_names && cmp(dbls, dbstr.to_lex_cstring()))
+    {
+      sql_print_warning("'db' entry '%s %s@%s' had database in mixed "
+                        "case that has been forced to lowercase because "
+                        "lower_case_table_names is set. It will not be "
+                        "possible to remove this privilege using REVOKE.",
+                        db.db, db.user, safe_str(db.host.hostname));
+    }
+
     if (opt_skip_name_resolve && hostname_requires_resolving(db.host.hostname))
     {
       sql_print_warning("'db' entry '%s %s@%s' "
@@ -2746,28 +2790,6 @@ static bool acl_load(THD *thd, const Grant_tables& tables)
     db.access= db_table.get_access();
     db.access=fix_rights_for_db(db.access);
     db.initial_access= db.access;
-    if (lower_case_table_names)
-    {
-      /*
-        convert db to lower case and give a warning if the db wasn't
-        already in lower case
-      */
-      char *end = strnmov(tmp_name, db.db, sizeof(tmp_name));
-      if (end >= tmp_name + sizeof(tmp_name))
-      {
-        sql_print_warning(ER_THD(thd, ER_WRONG_DB_NAME), db.db);
-        continue;
-      }
-      my_casedn_str(files_charset_info, db_name);
-      if (strcmp(db_name, tmp_name) != 0)
-      {
-        sql_print_warning("'db' entry '%s %s@%s' had database in mixed "
-                          "case that has been forced to lowercase because "
-                          "lower_case_table_names is set. It will not be "
-                          "possible to remove this privilege using REVOKE.",
-		          db.db, db.user, safe_str(db.host.hostname));
-      }
-    }
     db.sort=get_magic_sort("hdu", db.host.hostname, db.db, db.user);
 #ifndef TO_BE_REMOVED
     if (db_table.num_fields() <=  9)
@@ -5441,17 +5463,21 @@ void GRANT_NAME::set_user_details(const char *h, const char *d,
   update_hostname(&host, strdup_root(&grant_memroot, h));
   if (db != d)
   {
-    db= strdup_root(&grant_memroot, d);
-    if (lower_case_table_names)
-      my_casedn_str(files_charset_info, db);
+    DBUG_ASSERT(d);
+    db= lower_case_table_names ?
+        lex_string_casedn_root(&grant_memroot, files_charset_info,
+                               d, strlen(d)).str :
+        strdup_root(&grant_memroot, d);
   }
   user = strdup_root(&grant_memroot,u);
   sort=  get_magic_sort("hdu", host.hostname, db, user);
   if (tname != t)
   {
-    tname= strdup_root(&grant_memroot, t);
-    if (lower_case_table_names || is_routine)
-      my_casedn_str(files_charset_info, tname);
+    DBUG_ASSERT(t);
+    tname= lower_case_table_names || is_routine ?
+           lex_string_casedn_root(&grant_memroot, files_charset_info,
+                                  t, strlen(t)).str :
+           strdup_root(&grant_memroot, t);
   }
   key_length= strlen(d) + strlen(u)+ strlen(t)+3;
   hash_key=   (char*) alloc_root(&grant_memroot,key_length);
@@ -5498,11 +5524,15 @@ GRANT_NAME::GRANT_NAME(TABLE *form, bool is_routine)
   sort=  get_magic_sort("hdu", host.hostname, db, user);
   if (lower_case_table_names)
   {
-    my_casedn_str(files_charset_info, db);
+    DBUG_ASSERT(db);
+    db= lex_string_casedn_root(&grant_memroot, files_charset_info,
+                               db, strlen(db)).str;
   }
   if (lower_case_table_names || is_routine)
   {
-    my_casedn_str(files_charset_info, tname);
+    DBUG_ASSERT(tname);
+    tname= lex_string_casedn_root(&grant_memroot, files_charset_info,
+                                  tname, strlen(tname)).str;
   }
   key_length= (strlen(db) + strlen(user) + strlen(tname) + 3);
   hash_key=   (char*) alloc_root(&grant_memroot, key_length);

@@ -1506,6 +1506,10 @@ size_t my_copy_fix_mb(CHARSET_INFO *cs,
 /* Functions for 8bit */
 extern size_t my_caseup_str_8bit(CHARSET_INFO *, char *);
 extern size_t my_casedn_str_8bit(CHARSET_INFO *, char *);
+static inline size_t my_casedn_str_latin1(char *str)
+{
+  return my_casedn_str_8bit(&my_charset_latin1, str);
+}
 extern size_t my_caseup_8bit(CHARSET_INFO *,
                              const char *src, size_t srclen,
                              char *dst, size_t dstlen);

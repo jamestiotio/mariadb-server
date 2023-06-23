@@ -117,8 +117,12 @@ public:
           bool use_explicit_name)
     : Database_qualified_name(db, name), m_explicit_name(use_explicit_name)
   {
-    if (lower_case_table_names && m_db.length)
-      m_db.length= my_casedn_str(files_charset_info, (char*) m_db.str);
+    /*
+      "db" can be {NULL,0} in case of a "DROP FUNCTION udf" statement.
+      Otherwise, a valid normalized non-NULL database name is expected.
+    */
+    DBUG_ASSERT((!db->str && !db->length) ||
+                !Lex_ident_fs(*db).check_db_name_quick());
   }
 
   /** Create temporary sp_name object from MDL key. Store in qname_buff */

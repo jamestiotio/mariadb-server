@@ -45,6 +45,10 @@ public:
   bool is_in_lower_case() const;
   bool ok_for_lower_case_names() const;
 #endif
+  bool check_db_name_quick() const
+  {
+    return !length || length > NAME_LEN || str[length-1] == ' ';
+  }
 };
 
 
