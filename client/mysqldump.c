@@ -1975,7 +1975,7 @@ static int connect_to_db(char *host, char *user,char *passwd)
   mysql_init(&mysql_connection);
   if (opt_compress)
     mysql_options(&mysql_connection,MYSQL_OPT_COMPRESS,NullS);
-  SET_SSL_OPTS(&mysql_connection);
+  SET_SSL_OPTS_WITH_CHECK(&mysql_connection);
   if (opt_protocol)
     mysql_options(&mysql_connection,MYSQL_OPT_PROTOCOL,(char*)&opt_protocol);
   mysql_options(&mysql_connection, MYSQL_SET_CHARSET_NAME, default_charset);

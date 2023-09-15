@@ -40,7 +40,7 @@ static my_bool option_force=0,interrupted=0,new_line=0,
                opt_compress= 0, opt_local= 0, opt_relative= 0, opt_verbose= 0,
                tty_password= 0, opt_nobeep, opt_shutdown_wait_for_slaves= 0;
 static my_bool debug_info_flag= 0, debug_check_flag= 0;
-static uint tcp_port = 0, option_wait = 0, option_silent=0, nr_iterations;
+static uint opt_mysql_port = 0, option_wait = 0, option_silent=0, nr_iterations;
 static uint opt_count_iterations= 0, my_end_arg;
 static ulong opt_connect_timeout, opt_shutdown_timeout;
 static char * unix_port=0;
@@ -166,7 +166,7 @@ static struct my_option my_long_options[] =
    "/etc/services, "
 #endif
    "built-in default (" STRINGIFY_ARG(MYSQL_PORT) ").",
-   &tcp_port, &tcp_port, 0, GET_UINT, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
+   &opt_mysql_port, &opt_mysql_port, 0, GET_UINT, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"protocol", OPT_MYSQL_PROTOCOL, "The protocol to use for connection (tcp, socket, pipe).",
     0, 0, 0, GET_STR,  REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"relative", 'r',
@@ -364,7 +364,7 @@ int main(int argc,char *argv[])
     mysql_options(&mysql,MYSQL_OPT_CONNECT_TIMEOUT, (char*) &tmp);
   }
 
-  SET_SSL_OPTS(&mysql);
+  SET_SSL_OPTS_WITH_CHECK(&mysql);
 
   if (opt_protocol)
     mysql_options(&mysql,MYSQL_OPT_PROTOCOL,(char*)&opt_protocol);
@@ -525,7 +525,7 @@ static my_bool sql_connect(MYSQL *mysql, uint wait)
 
   for (;;)
   {
-    if (mysql_real_connect(mysql,host,user,opt_password,NullS,tcp_port,
+    if (mysql_real_connect(mysql,host,user,opt_password,NullS,opt_mysql_port,
 			   unix_port, CLIENT_REMEMBER_OPTIONS))
     {
       my_bool reconnect= 1;
@@ -557,9 +557,9 @@ static my_bool sql_connect(MYSQL *mysql, uint wait)
 	{
 	  fprintf(stderr,"Check that mariadbd is running on %s",host);
 	  fprintf(stderr," and that the port is %d.\n",
-		  tcp_port ? tcp_port: mysql_port);
+		  opt_mysql_port ? opt_mysql_port: mysql_port);
 	  fprintf(stderr,"You can check this by doing 'telnet %s %d'\n",
-		  host, tcp_port ? tcp_port: mysql_port);
+		  host, opt_mysql_port ? opt_mysql_port: mysql_port);
 	}
       }
       return 1;
