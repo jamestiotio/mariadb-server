@@ -4658,7 +4658,9 @@ static Sys_var_bit Sys_sql_notes(
        "recorded. mysqldump has outputs to set this variable to 0 so that no "
        "unnecessary increments occur when data is reloaded.",
        SESSION_VAR(option_bits), NO_CMD_LINE, OPTION_SQL_NOTES,
-       DEFAULT(TRUE));
+       DEFAULT(TRUE),
+       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0), ON_UPDATE(0),
+       DEPRECATED(1103, "'@@note_verbosity'"));
 
 static Sys_var_bit Sys_auto_is_null(
        "sql_auto_is_null", "If set to 1, the query SELECT * FROM table_name WHERE "

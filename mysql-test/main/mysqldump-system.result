@@ -1883,6 +1883,8 @@ DROP FUNCTION IF EXISTS metaphon;
 DROP SERVER s1;
 set time_zone= @@global.time_zone;
 # Restore from mysqldump
+Warning (Code 1287): '@@sql_notes' is deprecated and will be removed in a future release. Please use '@@note_verbosity' instead
+Warning (Code 1287): '@@sql_notes' is deprecated and will be removed in a future release. Please use '@@note_verbosity' instead
 DROP USER mariadb_test_restore;
 SELECT * FROM mysql.global_priv ORDER BY User,Host;
 Host	User	Priv
