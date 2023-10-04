@@ -308,13 +308,13 @@ class UndorecApplier
 {
   /** Undo log block page id */
   page_id_t page_id;
-  /** Pointer to within undo log record pointer */
+  /** Pointer to within undo log record */
   const trx_undo_rec_t *undo_rec;
   /** Undo log record type */
   byte type;
   /** compiler information */
   byte cmpl_info;
-  /** page_offset(undo_rec) for the start of undo_rec */
+  /** page_offset(undo_rec) of the start of undo_rec */
   uint16_t offset;
   /** Transaction id of the undo log */
   const trx_id_t trx_id;

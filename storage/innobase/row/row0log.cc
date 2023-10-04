@@ -3827,7 +3827,7 @@ dberr_t dict_table_t::clear(que_thr_t *thr)
 
 inline bool UndorecApplier::is_same(roll_ptr_t roll_ptr) const
 {
-  return uint16_t(offset) == offset &&
+  return uint16_t(roll_ptr) == offset &&
     uint32_t(roll_ptr >> 16) == page_id.page_no();
 }
 
