@@ -426,7 +426,7 @@ static bool row_undo_ins_parse_undo_rec(undo_node_t* node, bool dict_locked)
 		      || dict_table_is_file_per_table(table)
 		      == !is_system_tablespace(table->space_id));
 		size_t len = mach_read_from_2(node->undo_rec)
-			+ size_t(node->undo_rec - ptr) - 2;
+			- page_offset(ptr) - 2;
 		const span<const char> name(reinterpret_cast<const char*>(ptr),
 					    len);
 		if (strlen(table->name.m_name) != len

@@ -338,20 +338,9 @@ static buf_block_t* row_undo_rec_get(undo_node_t* node)
 	}
 
 	undo_page->fix();
-#if 1 // FIXME: actually remove this copying
-	node->undo_rec = trx_undo_rec_copy(undo_page->page.frame + offset,
-					   node->heap);
-
 	mtr.commit();
 
-	if (UNIV_UNLIKELY(!node->undo_rec)) {
-		undo_page->unfix();
-		return nullptr;
-	}
-#else
 	node->undo_rec = undo_page->page.frame + offset;
-
-	mtr.commit();
 
 	const size_t end = mach_read_from_2(node->undo_rec);
 	if (UNIV_UNLIKELY(end <= offset
@@ -360,7 +349,6 @@ static buf_block_t* row_undo_rec_get(undo_node_t* node)
 		node->undo_rec = nullptr;
 		return nullptr;
 	}
-#endif
 
 	switch (node->undo_rec[2] & (TRX_UNDO_CMPL_INFO_MULT - 1)) {
 	case TRX_UNDO_INSERT_METADATA:
