@@ -881,7 +881,7 @@ static void trx_purge_rseg_get_next_history_log(ulint *n_pages_handled)
 
     mtr.commit();
 
-    if (UNIV_LIKELY(trx_no))
+    if (UNIV_LIKELY(trx_no != 0))
     {
       purge_sys.rseg->last_page_no= prev_log_addr.page;
       purge_sys.rseg->set_last_commit(prev_log_addr.boffset, trx_no);

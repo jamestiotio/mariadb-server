@@ -1269,7 +1269,7 @@ static void purge_coordinator_callback(void*);
 static void purge_truncation_callback(void*)
 {
   purge_sys.latch.rd_lock(SRW_LOCK_CALL);
-  const purge_sys_t::iterator head{purge_sys.head};
+  const purge_sys_t::iterator head= purge_sys.head;
   purge_sys.latch.rd_unlock();
   head.free_history();
 }
