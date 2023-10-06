@@ -444,7 +444,8 @@ private:
 
 class Key :public Sql_alloc, public DDL_options {
 public:
-  enum Keytype { PRIMARY, UNIQUE, MULTIPLE, FULLTEXT, SPATIAL, FOREIGN_KEY};
+  enum Keytype { PRIMARY, UNIQUE, MULTIPLE, FULLTEXT, SPATIAL, FOREIGN_KEY,
+                 IGNORE_KEY};
   enum Keytype type;
   KEY_CREATE_INFO key_create_info;
   List<Key_part_spec> columns;
@@ -698,6 +699,7 @@ typedef struct system_variables
   ulonglong log_slow_verbosity; 
   ulonglong log_slow_disabled_statements;
   ulonglong log_disabled_statements;
+  ulonglong note_verbosity;
   ulonglong bulk_insert_buff_size;
   ulonglong join_buff_size;
   ulonglong sortbuff_size;
@@ -749,6 +751,8 @@ typedef struct system_variables
   ulong optimizer_search_depth;
   ulong optimizer_selectivity_sampling_limit;
   ulong optimizer_use_condition_selectivity;
+  ulong optimizer_max_sel_arg_weight;
+  ulong optimizer_max_sel_args;
   ulong use_stat_tables;
   double sample_percentage;
   ulong histogram_size;
@@ -770,6 +774,7 @@ typedef struct system_variables
   ulong trans_alloc_block_size;
   ulong trans_prealloc_size;
   ulong log_warnings;
+  ulong log_slow_max_warnings;
   /* Flags for slow log filtering */
   ulong log_slow_rate_limit; 
   ulong binlog_format; ///< binlog format for this thd (see enum_binlog_format)
@@ -876,7 +881,7 @@ typedef struct system_variables
   uint column_compression_threshold;
   uint column_compression_zlib_level;
   uint in_subquery_conversion_threshold;
-  ulong optimizer_max_sel_arg_weight;
+
   ulonglong max_rowid_filter_size;
 
   vers_asof_timestamp_t vers_asof_timestamp;
@@ -5659,6 +5664,14 @@ public:
   {
     return (variables.log_slow_verbosity & LOG_SLOW_VERBOSITY_ENGINE) ||
            lex->analyze_stmt;
+  }
+
+  /* Return true if we should create a note when an unusable key is found */
+  bool give_notes_for_unusable_keys()
+  {
+    return ((variables.note_verbosity & (NOTE_VERBOSITY_UNUSABLE_KEYS)) ||
+            (lex->describe && // Is EXPLAIN
+             (variables.note_verbosity & NOTE_VERBOSITY_EXPLAIN)));
   }
 };
 

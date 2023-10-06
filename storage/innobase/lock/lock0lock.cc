@@ -932,6 +932,21 @@ lock_rec_other_has_expl_req(
 #ifdef WITH_WSREP
 void lock_wait_wsrep_kill(trx_t *bf_trx, ulong thd_id, trx_id_t trx_id);
 
+#ifdef UNIV_DEBUG
+void wsrep_report_error(const lock_t* victim_lock, const trx_t *bf_trx)
+{
+  // We have conflicting BF-BF case, these threads
+  // should not execute concurrently
+  mtr_t mtr;
+  WSREP_ERROR("BF request is not compatible with victim");
+  WSREP_ERROR("BF requesting lock: ");
+  lock_rec_print(stderr, bf_trx->lock.wait_lock, mtr);
+  WSREP_ERROR("victim holding lock: ");
+  lock_rec_print(stderr, victim_lock, mtr);
+  wsrep_assert_no_bf_bf_wait(victim_lock, bf_trx);
+}
+#endif /* WITH_DEBUG */
+
 /** Kill the holders of conflicting locks.
 @param trx   brute-force applier transaction running in the current thread */
 ATTRIBUTE_COLD ATTRIBUTE_NOINLINE
@@ -960,13 +975,26 @@ func_exit:
     dict_table_t *table= wait_lock->un_member.tab_lock.table;
     for (lock_t *lock= UT_LIST_GET_FIRST(table->locks); lock;
          lock= UT_LIST_GET_NEXT(un_member.tab_lock.locks, lock))
+    {
       /* if victim has also BF status, but has earlier seqno, we have to wait */
       if (lock->trx != trx &&
           !(wsrep_thd_is_BF(lock->trx->mysql_thd, false) &&
             wsrep_thd_order_before(lock->trx->mysql_thd, trx->mysql_thd)))
       {
+        if (wsrep_thd_is_BF(lock->trx->mysql_thd, false))
+        {
+          // There is no need to kill victim with compatible lock
+          if (!lock_has_to_wait(trx->lock.wait_lock, lock))
+            continue;
+
+#ifdef UNIV_DEBUG
+          wsrep_report_error(lock, trx);
+#endif
+        }
+
         victims.emplace(lock->trx);
       }
+    }
   }
   else
   {
@@ -980,14 +1008,26 @@ func_exit:
       if (!lock_rec_get_nth_bit(lock, heap_no))
         lock= lock_rec_get_next(heap_no, lock);
       do
+      {
         /* if victim has also BF status, but has earlier seqno, we have to wait */
         if (lock->trx != trx &&
             !(wsrep_thd_is_BF(lock->trx->mysql_thd, false) &&
               wsrep_thd_order_before(lock->trx->mysql_thd, trx->mysql_thd)))
         {
+          if (wsrep_thd_is_BF(lock->trx->mysql_thd, false))
+          {
+            // There is no need to kill victim with compatible lock
+            if (!lock_has_to_wait(trx->lock.wait_lock, lock))
+              continue;
+
+#ifdef UNIV_DEBUG
+            wsrep_report_error(lock, trx);
+#endif
+          }
+
           victims.emplace(lock->trx);
         }
-      while ((lock= lock_rec_get_next(heap_no, lock)));
+      } while ((lock= lock_rec_get_next(heap_no, lock)));
     }
   }
 
@@ -3952,6 +3992,42 @@ dberr_t lock_sys_tables(trx_t *trx)
   return err;
 }
 
+/** Rebuild waiting queue after first_lock for heap_no. The queue is rebuilt
+close to the way lock_rec_dequeue_from_page() does it.
+@param trx        transaction that has set a lock, which caused the queue
+                  rebuild
+@param cell       rec hash cell of first_lock
+@param first_lock the lock after which waiting queue will be rebuilt
+@param heap_no    heap no of the record for which waiting queue to rebuild */
+static void lock_rec_rebuild_waiting_queue(
+#if defined(UNIV_DEBUG) || !defined(DBUG_OFF)
+    trx_t *trx,
+#endif /* defined(UNIV_DEBUG) || !defined(DBUG_OFF) */
+    hash_cell_t &cell, lock_t *first_lock, ulint heap_no)
+{
+  lock_sys.assert_locked(cell);
+
+  for (lock_t *lock= first_lock; lock != NULL;
+       lock= lock_rec_get_next(heap_no, lock))
+  {
+    if (!lock->is_waiting())
+      continue;
+    mysql_mutex_lock(&lock_sys.wait_mutex);
+    ut_ad(lock->trx->lock.wait_trx);
+    ut_ad(lock->trx->lock.wait_lock);
+
+    if (const lock_t *c= lock_rec_has_to_wait_in_queue(cell, lock))
+      lock->trx->lock.wait_trx= c->trx;
+    else
+    {
+      /* Grant the lock */
+      ut_ad(trx != lock->trx);
+      lock_grant(lock);
+    }
+    mysql_mutex_unlock(&lock_sys.wait_mutex);
+  }
+}
+
 /*=========================== LOCK RELEASE ==============================*/
 
 /*************************************************************//**
@@ -4015,26 +4091,11 @@ released:
 	}
 
 	/* Check if we can now grant waiting lock requests */
-
-	for (lock = first_lock; lock != NULL;
-	     lock = lock_rec_get_next(heap_no, lock)) {
-		if (!lock->is_waiting()) {
-			continue;
-		}
-		mysql_mutex_lock(&lock_sys.wait_mutex);
-		ut_ad(lock->trx->lock.wait_trx);
-		ut_ad(lock->trx->lock.wait_lock);
-
-		if (const lock_t* c = lock_rec_has_to_wait_in_queue(g.cell(),
-								    lock)) {
-			lock->trx->lock.wait_trx = c->trx;
-		} else {
-			/* Grant the lock */
-			ut_ad(trx != lock->trx);
-			lock_grant(lock);
-		}
-		mysql_mutex_unlock(&lock_sys.wait_mutex);
-	}
+	lock_rec_rebuild_waiting_queue(
+#if defined(UNIV_DEBUG) || !defined(DBUG_OFF)
+					trx,
+#endif /* defined(UNIV_DEBUG) || !defined(DBUG_OFF) */
+					g.cell(), first_lock, heap_no);
 }
 
 /** Release the explicit locks of a committing transaction,
@@ -4228,6 +4289,30 @@ void lock_release_on_drop(trx_t *trx)
   }
 }
 
+/** Reset lock bit for supremum and rebuild waiting queue.
+@param cell rec hash cell of in_lock
+@param lock the lock with supemum bit set */
+static void lock_rec_unlock_supremum(hash_cell_t &cell, lock_t *lock)
+{
+  ut_ad(lock_rec_get_nth_bit(lock, PAGE_HEAP_NO_SUPREMUM));
+#ifdef SAFE_MUTEX
+  ut_ad(!mysql_mutex_is_owner(&lock_sys.wait_mutex));
+#endif /* SAFE_MUTEX */
+  ut_ad(!lock->is_table());
+  ut_ad(lock_sys.is_writer() || lock->trx->mutex_is_owner());
+
+  lock_rec_reset_nth_bit(lock, PAGE_HEAP_NO_SUPREMUM);
+
+  lock_t *first_lock= lock_sys_t::get_first(
+      cell, lock->un_member.rec_lock.page_id, PAGE_HEAP_NO_SUPREMUM);
+
+  lock_rec_rebuild_waiting_queue(
+#if defined(UNIV_DEBUG) || !defined(DBUG_OFF)
+      lock->trx,
+#endif /* defined(UNIV_DEBUG) || !defined(DBUG_OFF) */
+      cell, first_lock, PAGE_HEAP_NO_SUPREMUM);
+}
+
 /** Release non-exclusive locks on XA PREPARE,
 and wake up possible other transactions waiting because of these locks.
 @param trx   transaction in XA PREPARE state
@@ -4259,20 +4344,18 @@ static bool lock_release_on_prepare_try(trx_t *trx)
     if (!lock->is_table())
     {
       ut_ad(!lock->index->table->is_temporary());
-      if (lock->mode() == LOCK_X && !lock->is_gap()) {
-        ut_ad(lock->trx->isolation_level > TRX_ISO_READ_COMMITTED ||
-              /* Insert-intention lock is valid for supremum for isolation
-              level > TRX_ISO_READ_COMMITTED */
-              lock->mode() == LOCK_X ||
-              !lock_rec_get_nth_bit(lock, PAGE_HEAP_NO_SUPREMUM));
+      bool supremum_bit = lock_rec_get_nth_bit(lock, PAGE_HEAP_NO_SUPREMUM);
+      if (!supremum_bit && lock->is_rec_granted_exclusive_not_gap())
         continue;
-      }
       auto &lock_hash= lock_sys.hash_get(lock->type_mode);
       auto cell= lock_hash.cell_get(lock->un_member.rec_lock.page_id.fold());
       auto latch= lock_sys_t::hash_table::latch(cell);
       if (latch->try_acquire())
       {
-        lock_rec_dequeue_from_page(lock, false);
+        if (supremum_bit)
+          lock_rec_unlock_supremum(*cell, lock);
+        else
+          lock_rec_dequeue_from_page(lock, false);
         latch->release();
       }
       else
@@ -4312,7 +4395,7 @@ static bool lock_release_on_prepare_try(trx_t *trx)
 and release possible other transactions waiting because of these locks. */
 void lock_release_on_prepare(trx_t *trx)
 {
-  auto _ = make_scope_exit([trx]() { trx->set_skip_lock_inheritance(); });
+  trx->set_skip_lock_inheritance();
 
   for (ulint count= 5; count--; )
     if (lock_release_on_prepare_try(trx))
@@ -4329,8 +4412,14 @@ void lock_release_on_prepare(trx_t *trx)
     if (!lock->is_table())
     {
       ut_ad(!lock->index->table->is_temporary());
-      if (lock->mode() != LOCK_X || lock->is_gap())
+      if (!lock->is_rec_granted_exclusive_not_gap())
         lock_rec_dequeue_from_page(lock, false);
+      else if (lock_rec_get_nth_bit(lock, PAGE_HEAP_NO_SUPREMUM))
+      {
+        auto &lock_hash= lock_sys.hash_get(lock->type_mode);
+        auto cell= lock_hash.cell_get(lock->un_member.rec_lock.page_id.fold());
+        lock_rec_unlock_supremum(*cell, lock);
+      }
       else
         ut_ad(lock->trx->isolation_level > TRX_ISO_READ_COMMITTED ||
               /* Insert-intention lock is valid for supremum for isolation

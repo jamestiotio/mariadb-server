@@ -90,6 +90,7 @@ Created 2/16/1996 Heikki Tuuri
 #include "btr0pcur.h"
 #include "zlib.h"
 #include "ut0crc32.h"
+#include "log.h"
 
 /** We are prepared for a situation that we have this many threads waiting for
 a transactional lock inside InnoDB. srv_start() sets the value. */
@@ -1228,7 +1229,12 @@ dberr_t srv_start(bool create_new_db)
 	}
 #endif /* UNIV_DEBUG */
 
-	log_sys.create();
+	if (!log_sys.create()) {
+		sql_print_error("InnoDB: Cannot allocate memory;"
+				" too large innodb_log_buffer_size?");
+		return srv_init_abort(DB_ERROR);
+	}
+
 	recv_sys.create();
 	lock_sys.create(srv_lock_table_size);
 
@@ -1486,9 +1492,14 @@ file_checked:
 		if (srv_force_recovery < SRV_FORCE_NO_LOG_REDO) {
 			/* Apply the hashed log records to the
 			respective file pages, for the last batch of
-			recv_group_scan_log_recs(). */
-
+			recv_group_scan_log_recs().
+			Since it may generate huge batch of threadpool tasks,
+			for read io task group, scale down thread creation rate
+			by temporarily restricting tpool concurrency.
+			*/
+			srv_thread_pool->set_concurrency(srv_n_read_io_threads);
 			recv_sys.apply(true);
+			srv_thread_pool->set_concurrency();
 
 			if (recv_sys.is_corrupt_log()
 			    || recv_sys.is_corrupt_fs()) {
