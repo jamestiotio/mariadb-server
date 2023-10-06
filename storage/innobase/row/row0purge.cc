@@ -1261,7 +1261,10 @@ row_purge_step(
 		node->undo_recs.pop();
 		node->roll_ptr = purge_rec.roll_ptr;
 
-		row_purge(node, purge_rec.undo_rec, thr);
+		row_purge(node, purge_rec.undo_page->page.frame
+			  + uint16_t(purge_rec.roll_ptr), thr);
+		// FIXME: preserve if we could not purge this
+		purge_rec.undo_page->unfix();
 	}
 
 	thr->run_node = node->end();

@@ -133,8 +133,10 @@ private:
   /** Read view at the start of a purge batch. Any encountered index records
   that are older than view will be removed. */
   ReadViewBase view;
+  /** whether the subsystem has been initialized */
+  bool m_initialized{false};
   /** whether purge is enabled; protected by latch and std::atomic */
-  std::atomic<bool> m_enabled;
+  std::atomic<bool> m_enabled{false};
   /** number of pending stop() calls without resume() */
   Atomic_counter<uint32_t> m_paused;
   /** number of stop_SYS() calls without resume_SYS() */
@@ -211,17 +213,6 @@ public:
 		/** The undo tablespace that was last truncated */
 		fil_space_t*	last;
 	} truncate;
-
-	/** Heap for reading the undo log records */
-	mem_heap_t*	heap;
-  /**
-    Constructor.
-
-    Some members may require late initialisation, thus we just mark object as
-    uninitialised. Real initialisation happens in create().
-  */
-
-  purge_sys_t(): m_enabled(false), heap(nullptr) {}
 
   /** Create the instance */
   void create();

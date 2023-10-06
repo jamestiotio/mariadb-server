@@ -83,9 +83,9 @@ row_purge_step(
 /** Info required to purge a record */
 struct trx_purge_rec_t
 {
-  /** Record to purge */
-  const trx_undo_rec_t *undo_rec;
-  /** File pointer to undo record */
+  /** Undo log page */
+  buf_block_t *undo_page;
+  /** File pointer to undo record, or ~0ULL if the undo log can be skipped */
   roll_ptr_t roll_ptr;
 };
 

@@ -163,7 +163,7 @@ purge_graph_build()
 void purge_sys_t::create()
 {
   ut_ad(this == &purge_sys);
-  ut_ad(!heap);
+  ut_ad(!m_initialized);
   ut_ad(!enabled());
   m_paused= 0;
   m_SYS_paused= 0;
@@ -179,14 +179,14 @@ void purge_sys_t::create()
   mysql_mutex_init(purge_sys_pq_mutex_key, &pq_mutex, nullptr);
   truncate.current= NULL;
   truncate.last= NULL;
-  heap= mem_heap_create(4096);
+  m_initialized= true;
 }
 
 /** Close the purge subsystem on shutdown. */
 void purge_sys_t::close()
 {
   ut_ad(this == &purge_sys);
-  if (!heap)
+  if (!m_initialized)
     return;
 
   ut_ad(!enabled());
@@ -199,8 +199,7 @@ void purge_sys_t::close()
   latch.destroy();
   end_latch.destroy();
   mysql_mutex_destroy(&pq_mutex);
-  mem_heap_free(heap);
-  heap= nullptr;
+  m_initialized= false;
 }
 
 /** Determine if the history of a transaction is purgeable.
@@ -958,142 +957,131 @@ static bool trx_purge_choose_next_log()
 	}
 }
 
-/***********************************************************************//**
-Gets the next record to purge and updates the info in the purge system.
-@return copy of an undo log record
-@retval -1 if there is nothing to purge
-@retval nullptr on corruption */
-static
-trx_undo_rec_t*
-trx_purge_get_next_rec(
-/*===================*/
-	ulint*		n_pages_handled,/*!< in/out: number of UNDO pages
-					handled */
-	mem_heap_t*	heap)		/*!< in: memory heap where copied */
+/**
+Get the next record to purge and update the info in the purge system.
+@param n_pages_handled    number of UNDO pages handled
+@param roll_ptr           undo log pointer to the record
+@return buffer-fixed reference to undo log record
+@retval {nullptr,~0ULL} if the whole undo log can skipped in purge
+@retval {nullptr,0}  if nothing is left, or on corruption */
+static trx_purge_rec_t trx_purge_get_next_rec(ulint *n_pages_handled,
+                                              roll_ptr_t roll_ptr)
 {
-	mtr_t		mtr;
+  mtr_t mtr;
 
-	ut_ad(purge_sys.next_stored);
-	ut_ad(purge_sys.tail.trx_no < purge_sys.low_limit_no());
-	ut_ad(purge_sys.rseg->latch.is_write_locked());
+  ut_ad(purge_sys.next_stored);
+  ut_ad(purge_sys.tail.trx_no < purge_sys.low_limit_no());
+  ut_ad(purge_sys.rseg->latch.is_write_locked());
 
-	const page_id_t page_id{purge_sys.rseg->space->id, purge_sys.page_no};
-	const uint16_t offset = purge_sys.offset;
-	bool locked = true;
+  const page_id_t page_id{purge_sys.rseg->space->id, purge_sys.page_no};
+  const uint16_t offset= purge_sys.offset;
+  bool locked= true;
 
-	if (offset == 0) {
-		/* It is the dummy undo log record, which means that there is
-		no need to purge this undo log */
+  if (!offset)
+  {
+    /* It is the dummy undo log record, which means that there is no
+    need to purge this undo log */
+    trx_purge_rseg_get_next_history_log(n_pages_handled);
 
-		trx_purge_rseg_get_next_history_log(n_pages_handled);
+    /* Look for the next undo log and record to purge */
+    trx_purge_choose_next_log();
+    return {nullptr, ~0ULL};
+  }
 
-		/* Look for the next undo log and record to purge */
+  ut_ad(offset == uint16_t(roll_ptr));
+  mtr.start();
 
-		trx_purge_choose_next_log();
-		return reinterpret_cast<trx_undo_rec_t*>(-1);
-	}
-
-	mtr.start();
-	trx_undo_rec_t *rec_copy = nullptr;
-	const buf_block_t* undo_page
-		= buf_page_get_gen(page_id, 0, RW_S_LATCH, nullptr,
-				   BUF_GET_POSSIBLY_FREED, &mtr);
-	if (UNIV_UNLIKELY(!undo_page)) {
+  buf_block_t *undo_page= buf_page_get_gen(page_id, 0, RW_S_LATCH, nullptr,
+                                           BUF_GET_POSSIBLY_FREED, &mtr);
+  if (UNIV_UNLIKELY(!undo_page))
+  {
+    mtr.commit();
+    roll_ptr= 0;
 func_exit:
-		if (locked) {
-			purge_sys.rseg->latch.wr_unlock();
-		}
-		mtr.commit();
-		return rec_copy;
-	}
+    if (locked)
+      purge_sys.rseg->latch.wr_unlock();
+    return {undo_page,roll_ptr};
+  }
 
-	const buf_block_t* rec2_page = undo_page;
+  const buf_block_t *rec2_page= undo_page;
 
-	const trx_undo_rec_t* rec2 = trx_undo_page_get_next_rec(
-		undo_page, offset, purge_sys.hdr_page_no, purge_sys.hdr_offset);
+  const trx_undo_rec_t *rec2=
+    trx_undo_page_get_next_rec(undo_page, offset, purge_sys.hdr_page_no,
+                               purge_sys.hdr_offset);
 
-	if (rec2 == NULL) {
-		rec2 = trx_undo_get_next_rec(rec2_page, offset,
-					     purge_sys.hdr_page_no,
-					     purge_sys.hdr_offset, &mtr);
-	}
+  if (rec2)
+    goto got_rec;
 
-	if (rec2 == NULL) {
-		mtr_commit(&mtr);
+  rec2= trx_undo_get_next_rec(rec2_page, offset, purge_sys.hdr_page_no,
+                              purge_sys.hdr_offset, &mtr);
+  if (!rec2)
+  {
+    undo_page->fix();
+    mtr.commit();
 
-		trx_purge_rseg_get_next_history_log(n_pages_handled);
+    trx_purge_rseg_get_next_history_log(n_pages_handled);
 
-		/* Look for the next undo log and record to purge */
+    /* Look for the next undo log and record to purge */
+    locked= trx_purge_choose_next_log();
+  }
+  else
+  {
+got_rec:
+    undo_page->fix();
+    mtr.commit();
 
-		locked = trx_purge_choose_next_log();
+    purge_sys.offset= page_offset(rec2);
+    purge_sys.page_no= rec2_page->page.id().page_no();
+    purge_sys.tail.undo_no= trx_undo_rec_get_undo_no(rec2);
 
-		mtr_start(&mtr);
+    *n_pages_handled+= undo_page != rec2_page;
+  }
 
-		undo_page = buf_page_get_gen(page_id, 0, RW_S_LATCH,
-					     nullptr, BUF_GET_POSSIBLY_FREED,
-					     &mtr);
-		if (UNIV_UNLIKELY(!undo_page)) {
-			goto func_exit;
-		}
-	} else {
-		purge_sys.offset = page_offset(rec2);
-		purge_sys.page_no = rec2_page->page.id().page_no();
-		purge_sys.tail.undo_no = trx_undo_rec_get_undo_no(rec2);
-
-		if (undo_page != rec2_page) {
-			/* We advance to a new page of the undo log: */
-			(*n_pages_handled)++;
-		}
-	}
-
-	rec_copy = trx_undo_rec_copy(undo_page->page.frame + offset, heap);
-	goto func_exit;
+  goto func_exit;
 }
 
-/********************************************************************//**
+/**
 Fetches the next undo log record from the history list to purge. It must be
 released with the corresponding release function.
-@return copy of an undo log record
-@retval -1 if the whole undo log can skipped in purge
-@retval nullptr if nothing is left, or on corruption */
+@param n_pages_handled    number of UNDO pages handled
+@return buffer-fixed reference to undo log record
+@retval {nullptr,-1} if the whole undo log can skipped in purge
+@retval {nullptr,0}  if nothing is left, or on corruption */
 static MY_ATTRIBUTE((warn_unused_result))
-trx_undo_rec_t*
-trx_purge_fetch_next_rec(
-/*=====================*/
-	roll_ptr_t*	roll_ptr,	/*!< out: roll pointer to undo record */
-	ulint*		n_pages_handled,/*!< in/out: number of UNDO log pages
-					handled */
-	mem_heap_t*	heap)		/*!< in: memory heap where copied */
+trx_purge_rec_t trx_purge_fetch_next_rec(ulint *n_pages_handled)
 {
+  roll_ptr_t roll_ptr;
+
   if (!purge_sys.next_stored)
   {
     bool locked= trx_purge_choose_next_log();
     ut_ad(locked == purge_sys.next_stored);
     if (!locked)
-      return nullptr;
+      goto got_nothing;
     if (purge_sys.tail.trx_no >= purge_sys.low_limit_no())
     {
       purge_sys.rseg->latch.wr_unlock();
-      return nullptr;
+      goto got_nothing;
     }
     /* row_purge_record_func() will later set ROLL_PTR_INSERT_FLAG for
     TRX_UNDO_INSERT_REC */
-    *roll_ptr= trx_undo_build_roll_ptr(false,
-                                       trx_sys.rseg_id(purge_sys.rseg, true),
-                                       purge_sys.page_no, purge_sys.offset);
+    roll_ptr= trx_undo_build_roll_ptr(false,
+                                      trx_sys.rseg_id(purge_sys.rseg, true),
+                                      purge_sys.page_no, purge_sys.offset);
   }
   else if (purge_sys.tail.trx_no >= purge_sys.low_limit_no())
-    return nullptr;
+  got_nothing:
+    return {nullptr, 0};
   else
   {
-    *roll_ptr= trx_undo_build_roll_ptr(false,
-                                       trx_sys.rseg_id(purge_sys.rseg, true),
-                                       purge_sys.page_no, purge_sys.offset);
+    roll_ptr= trx_undo_build_roll_ptr(false,
+                                      trx_sys.rseg_id(purge_sys.rseg, true),
+                                      purge_sys.page_no, purge_sys.offset);
     purge_sys.rseg->latch.wr_lock(SRW_LOCK_CALL);
   }
 
   /* The following will advance the purge iterator. */
-  return trx_purge_get_next_rec(n_pages_handled, heap);
+  return trx_purge_get_next_rec(n_pages_handled, roll_ptr);
 }
 
 /** Run a purge batch.
@@ -1143,11 +1131,8 @@ trx_purge_attach_undo_recs(ulint n_purge_threads, THD *thd)
 	i = 0;
 
 	std::unordered_map<table_id_t, purge_node_t*> table_id_map;
-	mem_heap_empty(purge_sys.heap);
 
 	while (UNIV_LIKELY(srv_undo_sources) || !srv_fast_shutdown) {
-		trx_purge_rec_t		purge_rec;
-
 		/* Track the max {trx_id, undo_no} for truncating the
 		UNDO logs once we have purged the records. */
 
@@ -1156,19 +1141,21 @@ trx_purge_attach_undo_recs(ulint n_purge_threads, THD *thd)
 		}
 
 		/* Fetch the next record, and advance the purge_sys.tail. */
-		purge_rec.undo_rec = trx_purge_fetch_next_rec(
-			&purge_rec.roll_ptr, &n_pages_handled,
-			purge_sys.heap);
+		trx_purge_rec_t purge_rec
+			= trx_purge_fetch_next_rec(&n_pages_handled);
 
-		if (!purge_rec.undo_rec) {
-			break;
-		} else if (purge_rec.undo_rec
-			   == reinterpret_cast<trx_undo_rec_t*>(-1)) {
-			continue;
+		if (!purge_rec.undo_page) {
+			if (!purge_rec.roll_ptr) {
+				break;
+			}
+			if (!~purge_rec.roll_ptr) {
+				continue;
+			}
 		}
 
 		table_id_t table_id = trx_undo_rec_get_table_id(
-			purge_rec.undo_rec);
+			purge_rec.undo_page->page.frame
+			+ uint16_t(purge_rec.roll_ptr));
 
 		purge_node_t *& table_node = table_id_map[table_id];
 
@@ -1203,9 +1190,14 @@ use_coordinator:
 			if (p.first) {
 				goto enqueue;
 			}
+
+			goto ignore;
 		} else if (table_node->tables[table_id].first) {
 enqueue:
 			table_node->undo_recs.push(purge_rec);
+		} else {
+ignore:
+			purge_rec.undo_page->unfix();
 		}
 
 		if (n_pages_handled >= srv_purge_batch_size) {
