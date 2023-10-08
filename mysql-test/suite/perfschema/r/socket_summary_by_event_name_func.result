@@ -12,7 +12,6 @@ SELECT @@port INTO @MY_MASTER_PORT;
 #
 # 1.1 Disable instrumentation of the default (this) connection
 #
-connection default;
 UPDATE performance_schema.threads
 SET INSTRUMENTED='NO' WHERE PROCESSLIST_ID = CONNECTION_ID();
 #
@@ -24,7 +23,7 @@ WHERE PROCESSLIST_ID = CONNECTION_ID();
 #
 # 1.3 Get the default OBJECT_INSTANCE_BEGIN
 #
-SELECT OBJECT_INSTANCE_BEGIN INTO @my_object_instance_begin
+SELECT OBJECT_INSTANCE_BEGIN INTO @default_object_instance_begin
 FROM performance_schema.socket_instances
 WHERE THREAD_ID = @my_thread_id;
 #
@@ -33,7 +32,7 @@ WHERE THREAD_ID = @my_thread_id;
 CREATE SCHEMA mysqltest;
 #
 # 1.5 Create a table to store summary values from socket_summary_by_instance
-and socket_summary_by_event_name
+#      and socket_summary_by_event_name
 #
 CREATE TABLE mysqltest.my_socket_summary AS
 SELECT * FROM performance_schema.socket_summary_by_instance
@@ -59,9 +58,11 @@ CREATE TABLE mysqltest.t2 (n INT AUTO_INCREMENT, s1 VARCHAR(1024), PRIMARY KEY(n
 #
 # 2.1 Connection 1 (tcp/ip, 127.0.0.1 or ::1)
 #
+connect con1,$my_localhost,root,,mysqltest,$MASTER_MYPORT;
 #
 # 2.2 Connection 2 (localhost or unix domain socket)
 #
+connect con2,localhost,root,,mysqltest;
 #==============================================================================
 # 3.0 RUN THE TESTS
 #==============================================================================
@@ -72,8 +73,8 @@ TRUNCATE performance_schema.socket_summary_by_instance;
 TRUNCATE performance_schema.socket_summary_by_event_name;
 #
 # 3.2 Get the 'before' sum of bytes written from socket_summary_by_instance
-for later comparison to the 'after' byte count as a simple confirmation
-that the table was updated.
+#     for later comparison to the 'after' byte count as a simple confirmation
+#     that the table was updated.
 #
 connection default;
 SELECT sum(SUM_NUMBER_OF_BYTES_WRITE) INTO @my_write_count
@@ -82,25 +83,22 @@ FROM performance_schema.socket_summary_by_instance;
 # 3.3 From connection 1, insert one a 1K row of data into t1
 #
 connection con1;
-USE mysqltest;
 INSERT INTO t1 (s1) VALUES (REPEAT('a', 1024));
 INSERT INTO t1 (s1) SELECT s1 FROM t1;
 #
 # 3.4 From connection 2, insert one a 1K row of data into t2
 #
 connection con2;
-USE mysqltest;
 INSERT INTO t2 (s1) VALUES (REPEAT('a', 1024));
 INSERT INTO t2 (s1) SELECT s1 FROM t2;
 #
-# 3.5 Get the 'after' sum of bytes written from socket_summary_by_instance
+# 3.5 Verify that SUM_NUMBER_OF_BYTES_WRITE increased
 #
 connection default;
-SELECT sum(SUM_NUMBER_OF_BYTES_WRITE) INTO @my_write_count
+SELECT sum(SUM_NUMBER_OF_BYTES_WRITE) > @my_write_count
 FROM performance_schema.socket_summary_by_instance;
-#
-# 3.6 Verify that SUM_NUMBER_OF_BYTES_WRITE increased
-#
+sum(SUM_NUMBER_OF_BYTES_WRITE) > @my_write_count
+1
 #
 # socket_summary_by_instance was updated
 #
@@ -109,23 +107,45 @@ FROM performance_schema.socket_summary_by_instance;
 #==============================================================================
 #
 # 4.1 Verify that the totals in socket_summary_by_event_name are
-consistent with totals in socket_summary_by_instance
+#     consistent with totals in socket_summary_by_instance
 #
+SELECT
+if (SUM(t_inst.COUNT_STAR) = t_name.COUNT_STAR, "OK", CONCAT(SUM(t_inst.COUNT_STAR), " != ", t_name.COUNT_STAR)) AS COUNT_STAR,
+if (SUM(t_inst.SUM_TIMER_WAIT) = t_name.SUM_TIMER_WAIT, "OK", CONCAT(SUM(t_inst.SUM_TIMER_WAIT), " != ", t_name.SUM_TIMER_WAIT)) AS SUM_TIMER_WAIT,
+if (MAX(t_inst.MAX_TIMER_WAIT) = t_name.MAX_TIMER_WAIT, "OK", CONCAT(MAX(t_inst.MAX_TIMER_WAIT), " != ", t_name.MAX_TIMER_WAIT)) AS MAX_TIMER_WAIT,
+if (SUM(t_inst.COUNT_READ) = t_name.COUNT_READ, "OK", CONCAT(SUM(t_inst.COUNT_READ), " != ", t_name.COUNT_READ)) AS COUNT_READ,
+if (SUM(t_inst.SUM_TIMER_READ) = t_name.SUM_TIMER_READ, "OK", CONCAT(SUM(t_inst.SUM_TIMER_READ), " != ", t_name.SUM_TIMER_READ)) AS SUM_TIMER_READ,
+if (MAX(t_inst.MAX_TIMER_READ) = t_name.MAX_TIMER_READ, "OK", CONCAT(MAX(t_inst.MAX_TIMER_READ), " != ", t_name.MAX_TIMER_READ)) AS MAX_TIMER_READ,
+if (SUM(t_inst.SUM_NUMBER_OF_BYTES_READ) = t_name.SUM_NUMBER_OF_BYTES_READ, "OK", CONCAT(SUM(t_inst.SUM_NUMBER_OF_BYTES_READ), " != ", t_name.SUM_NUMBER_OF_BYTES_READ)) AS SUM_NUMBER_OF_BYTES_READ,
+if (SUM(t_inst.COUNT_WRITE) = t_name.COUNT_WRITE, "OK", CONCAT(SUM(t_inst.COUNT_WRITE), " != ", t_name.COUNT_WRITE)) AS COUNT_WRITE,
+if (SUM(t_inst.SUM_TIMER_WRITE) = t_name.SUM_TIMER_WRITE, "OK", CONCAT(SUM(t_inst.SUM_TIMER_WRITE), " != ", t_name.SUM_TIMER_WRITE)) AS SUM_TIMER_WRITE,
+if (MAX(t_inst.MAX_TIMER_WRITE) = t_name.MAX_TIMER_WRITE, "OK", CONCAT(MAX(t_inst.MAX_TIMER_WRITE), " != ", t_name.MAX_TIMER_WRITE)) AS MAX_TIMER_WRITE,
+if (SUM(t_inst.SUM_NUMBER_OF_BYTES_WRITE) = t_name.SUM_NUMBER_OF_BYTES_WRITE, "OK", CONCAT(SUM(t_inst.SUM_NUMBER_OF_BYTES_WRITE), " != ", t_name.SUM_NUMBER_OF_BYTES_WRITE)) AS SUM_NUMBER_OF_BYTES_WRITE,
+if (SUM(t_inst.COUNT_MISC) = t_name.COUNT_MISC, "OK", CONCAT(SUM(t_inst.COUNT_MISC), " != ", t_name.COUNT_MISC)) AS COUNT_MISC,
+if (SUM(t_inst.SUM_TIMER_MISC) = t_name.SUM_TIMER_MISC, "OK", CONCAT(SUM(t_inst.SUM_TIMER_MISC), " != ", t_name.SUM_TIMER_MISC)) AS SUM_TIMER_MISC,
+EVENT_NAME
+FROM performance_schema.socket_summary_by_instance t_inst
+JOIN performance_schema.socket_summary_by_event_name t_name
+USING (EVENT_NAME)
+WHERE t_inst.event_name LIKE '%client%'
+  AND t_inst.object_instance_begin <> @default_object_instance_begin;
+COUNT_STAR	OK
+SUM_TIMER_WAIT	OK
+MAX_TIMER_WAIT	OK
+COUNT_READ	OK
+SUM_TIMER_READ	OK
+MAX_TIMER_READ	OK
+SUM_NUMBER_OF_BYTES_READ	OK
+COUNT_WRITE	OK
+SUM_TIMER_WRITE	OK
+MAX_TIMER_WRITE	OK
+SUM_NUMBER_OF_BYTES_WRITE	OK
+COUNT_MISC	OK
+SUM_TIMER_MISC	OK
+EVENT_NAME	wait/io/socket/sql/client_connection
 #==============================================================================
 # 5.0 Clean up
 #==============================================================================
-#
-# 5.1 Disconnect con1
-#
-connection con1;
 disconnect con1;
-#
-# 5.2 Disconnect con2
-#
-connection con2;
 disconnect con2;
-#
-# 5.3 Drop mysqltest
-#
-connection default;
 DROP DATABASE mysqltest;
