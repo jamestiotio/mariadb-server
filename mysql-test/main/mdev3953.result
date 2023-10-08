@@ -1,0 +1,26 @@
+connect con1,localhost,root,,;
+select seq from seq_1_to_10000000 where seq%1000000 = 0;
+connection default;
+# Found SENT_ROWS = 0
+# Found SENT_ROWS = 1
+# Found SENT_ROWS = 2
+# Found SENT_ROWS = 3
+# Found SENT_ROWS = 4
+# Found SENT_ROWS = 5
+# Found SENT_ROWS = 6
+# Found SENT_ROWS = 7
+# Found SENT_ROWS = 8
+# Found SENT_ROWS = 9
+# Found SENT_ROWS = 
+connection con1;
+seq
+1000000
+2000000
+3000000
+4000000
+5000000
+6000000
+7000000
+8000000
+9000000
+10000000

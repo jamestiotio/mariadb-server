@@ -1,0 +1,28 @@
+--source include/have_sequence.inc
+
+--connect(con1,localhost,root,,)
+--send
+  select seq from seq_1_to_10000000 where seq%1000000 = 0;
+
+--connection default
+--let $run=1
+--disable_query_log
+--disable_column_names
+--let $sent_rows=
+
+while ($run)
+{
+  --let $rows= `select sent_rows from information_schema.processlist where info is not null and id != connection_id()`
+  if ($rows != $sent_rows)
+  {
+    --echo # Found SENT_ROWS = $rows
+    --let $sent_rows= $rows
+  }
+  if ($rows == '') {
+    --let $run= 0
+  }
+}
+--enable_query_log
+--enable_column_names
+--connection con1
+--reap
