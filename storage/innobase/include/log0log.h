@@ -193,17 +193,28 @@ private:
 
 
 #if defined(__aarch64__)
-/* On ARM, we do more spinning */
-typedef srw_spin_lock log_rwlock_t;
-#define LSN_LOCK_ATTR MY_MUTEX_INIT_FAST
+  /* On ARM, we do more spinning */
+  typedef srw_spin_lock log_rwlock;
+  typedef srw_spin_mutex log_lsn_mutex;
 #else
-typedef srw_lock log_rwlock_t;
-#define LSN_LOCK_ATTR nullptr
+  typedef srw_lock log_rwlock;
+  typedef srw_mutex log_lsn_mutex;
 #endif
 
 public:
-  /** rw-lock protecting buf */
-  alignas(CPU_LEVEL1_DCACHE_LINESIZE) log_rwlock_t latch;
+  /** rw-lock protecting writes to buf; normal mtr_t::commit()
+  outside any log checkpoint is covered by a shared latch */
+  alignas(CPU_LEVEL1_DCACHE_LINESIZE) log_rwlock latch;
+private:
+  /** mutex protecting buf_free et al, together with latch */
+  log_lsn_mutex lsn_lock;
+public:
+  /** first free offset within buf use; protected by lsn_lock */
+  Atomic_relaxed<size_t> buf_free;
+  /** number of write requests (to buf); protected by lsn_lock */
+  size_t write_to_buf;
+  /** number of append_prepare_wait(); protected by lsn_lock */
+  size_t waits;
 private:
   /** Last written LSN */
   lsn_t write_lsn;
@@ -234,20 +245,7 @@ private:
   /** Buffer for writing to resize_log; @see flush_buf */
   byte *resize_flush_buf;
 
-  /** spin lock protecting lsn, buf_free in append_prepare() */
-  alignas(CPU_LEVEL1_DCACHE_LINESIZE) pthread_mutex_t lsn_lock;
-  void init_lsn_lock() { pthread_mutex_init(&lsn_lock, LSN_LOCK_ATTR); }
-  void lock_lsn() { pthread_mutex_lock(&lsn_lock); }
-  void unlock_lsn() { pthread_mutex_unlock(&lsn_lock); }
-  void destroy_lsn_lock() { pthread_mutex_destroy(&lsn_lock); }
-
 public:
-  /** first free offset within buf use; protected by lsn_lock */
-  Atomic_relaxed<size_t> buf_free;
-  /** number of write requests (to buf); protected by exclusive lsn_lock */
-  ulint write_to_buf;
-  /** number of waits in append_prepare(); protected by lsn_lock */
-  ulint waits;
   /** recommended maximum size of buf, after which the buffer is flushed */
   size_t max_buf_free;
 
@@ -441,7 +439,7 @@ public:
 private:
   /** Wait in append_prepare() for buffer to become available
   @param ex   whether log_sys.latch is exclusively locked */
-  ATTRIBUTE_COLD static void append_prepare_wait(bool ex) noexcept;
+  ATTRIBUTE_COLD void append_prepare_wait(bool ex) noexcept;
 public:
   /** Reserve space in the log buffer for appending data.
   @tparam pmem  log_sys.is_pmem()

@@ -102,7 +102,7 @@ void log_t::create()
   ut_ad(!is_initialised());
 
   latch.SRW_LOCK_INIT(log_latch_key);
-  init_lsn_lock();
+  lsn_lock.init();
 
   /* LSN 0 and 1 are reserved; @see buf_page_t::oldest_modification_ */
   lsn.store(FIRST_LSN, std::memory_order_relaxed);
@@ -815,7 +815,7 @@ template<bool release_latch> inline lsn_t log_t::write_buf() noexcept
       ... /* TODO: Update the LSN and adjust other code. */
 #else
       /* The rest of the block will be written as garbage.
-      (We want to avoid memset() while holding mutex.)
+      (We want to avoid memset() while holding exclusive log_sys.latch.)
       This block will be overwritten later, once records beyond
       the current LSN are generated. */
 # ifdef HAVE_valgrind
@@ -1294,7 +1294,7 @@ void log_t::close()
 #endif
 
   latch.destroy();
-  destroy_lsn_lock();
+  lsn_lock.destroy();
 
   recv_sys.close();
 
