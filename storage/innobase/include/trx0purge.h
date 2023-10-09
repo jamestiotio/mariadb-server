@@ -139,10 +139,10 @@ private:
   std::atomic<bool> m_enabled{false};
   /** number of pending stop() calls without resume() */
   Atomic_counter<uint32_t> m_paused;
-  /** number of stop_SYS() calls without resume_SYS() */
-  Atomic_counter<uint32_t> m_SYS_paused;
   /** number of stop_FTS() calls without resume_FTS() */
   Atomic_counter<uint32_t> m_FTS_paused;
+  /** Latch to stop the view from advancing */
+  srw_lock_low ddl_latch;
 
   /** latch protecting end_view */
   alignas(CPU_LEVEL1_DCACHE_LINESIZE) srw_spin_lock_low end_latch;
@@ -250,17 +250,12 @@ public:
   void resume();
 
 private:
-  void wait_SYS();
   void wait_FTS();
 public:
   /** Suspend purge in data dictionary tables */
-  void stop_SYS();
+  void stop_SYS() { ddl_latch.rd_lock(); }
   /** Resume purge in data dictionary tables */
   static void resume_SYS(void *);
-  /** @return whether stop_SYS() is in effect */
-  bool must_wait_SYS() const { return m_SYS_paused; }
-  /** check stop_SYS() */
-  void check_stop_SYS() { if (must_wait_SYS()) wait_SYS(); }
 
   /** Pause purge during a DDL operation that could drop FTS_ tables. */
   void stop_FTS() { m_FTS_paused++; }
@@ -304,6 +299,11 @@ public:
   template<bool also_end_view= false>
   void clone_oldest_view()
   {
+    if (!also_end_view)
+    {
+      ddl_latch.wr_lock();
+      ddl_latch.wr_unlock();
+    }
     latch.wr_lock(SRW_LOCK_CALL);
     trx_sys.clone_oldest_view(&view);
     if (also_end_view)

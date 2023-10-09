@@ -1297,6 +1297,8 @@ void purge_sys_t::wake_if_not_active()
     else
     {
       purge_coordinator_timer->disarm();
+      ddl_latch.wr_lock();
+      ddl_latch.wr_unlock();
       latch.wr_lock(SRW_LOCK_CALL);
       if (purge_state.m_running)
       {
@@ -1320,37 +1322,20 @@ bool purge_sys_t::running() const
   return purge_coordinator_task.is_running();
 }
 
-/** Suspend purge in data dictionary tables */
-void purge_sys_t::stop_SYS()
-{
-  latch.rd_lock(SRW_LOCK_CALL);
-  ++m_SYS_paused;
-  latch.rd_unlock();
-}
-
 /** Stop purge during FLUSH TABLES FOR EXPORT */
 void purge_sys_t::stop()
 {
-  for (;;)
+  latch.wr_lock(SRW_LOCK_CALL);
+
+  if (!enabled())
   {
-    latch.wr_lock(SRW_LOCK_CALL);
-
-    if (!enabled())
-    {
-      /* Shutdown must have been initiated during FLUSH TABLES FOR EXPORT. */
-      ut_ad(!srv_undo_sources);
-      latch.wr_unlock();
-      return;
-    }
-
-    ut_ad(srv_n_purge_threads > 0);
-
-    if (!must_wait_SYS())
-      break;
-
+    /* Shutdown must have been initiated during FLUSH TABLES FOR EXPORT. */
+    ut_ad(!srv_undo_sources);
     latch.wr_unlock();
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    return;
   }
+
+  ut_ad(srv_n_purge_threads > 0);
 
   const auto paused= m_paused++;
 
@@ -1367,9 +1352,7 @@ void purge_sys_t::stop()
 /** Resume purge in data dictionary tables */
 void purge_sys_t::resume_SYS(void *)
 {
-  ut_d(const auto s=)
-  purge_sys.m_SYS_paused--;
-  ut_ad(s);
+  purge_sys.ddl_latch.rd_unlock();
 }
 
 /** Resume purge at UNLOCK TABLES after FLUSH TABLES FOR EXPORT */

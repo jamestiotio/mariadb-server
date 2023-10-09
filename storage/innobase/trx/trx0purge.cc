@@ -166,7 +166,6 @@ void purge_sys_t::create()
   ut_ad(!m_initialized);
   ut_ad(!enabled());
   m_paused= 0;
-  m_SYS_paused= 0;
   query= purge_graph_build();
   next_stored= false;
   rseg= NULL;
@@ -175,6 +174,7 @@ void purge_sys_t::create()
   hdr_page_no= 0;
   hdr_offset= 0;
   latch.SRW_LOCK_INIT(trx_purge_latch_key);
+  ddl_latch.init();
   end_latch.init();
   mysql_mutex_init(purge_sys_pq_mutex_key, &pq_mutex, nullptr);
   truncate.current= NULL;
@@ -197,6 +197,7 @@ void purge_sys_t::close()
   trx->state= TRX_STATE_NOT_STARTED;
   trx->free();
   latch.destroy();
+  ddl_latch.destroy();
   end_latch.destroy();
   mysql_mutex_destroy(&pq_mutex);
   m_initialized= false;
@@ -989,6 +990,7 @@ static trx_purge_rec_t trx_purge_get_next_rec(ulint *n_pages_handled,
   }
 
   ut_ad(offset == uint16_t(roll_ptr));
+
   mtr.start();
 
   buf_block_t *undo_page= buf_page_get_gen(page_id, 0, RW_S_LATCH, nullptr,
@@ -1165,19 +1167,9 @@ trx_purge_attach_undo_recs(ulint n_purge_threads, THD *thd)
 				table_id, false, DICT_TABLE_OP_NORMAL, thd,
 				&p.second);
 
-			if (UNIV_UNLIKELY(table_id == DICT_INDEXES_ID)) {
-				/* Operations on the SYS_INDEXES table
-				are always handled by the purge coordinator,
-				at the end of the batch, after closing
-				all table handles and releasing MDL */
-				i = 0;
-				goto use_coordinator;
-			}
-
 			thr = UT_LIST_GET_NEXT(thrs, thr);
 
 			if (!(++i % n_purge_threads)) {
-use_coordinator:
 				thr = UT_LIST_GET_FIRST(
 					purge_sys.query->thrs);
 			}
@@ -1322,7 +1314,6 @@ TRANSACTIONAL_TARGET ulint trx_purge(ulint n_tasks, ulint history_size)
 						 t.second.second);
 			}
 		}
-		/* FIXME: process SYS_INDEXES */
 		node->tables.clear();
 	}
 

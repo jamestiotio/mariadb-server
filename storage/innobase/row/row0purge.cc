@@ -189,7 +189,6 @@ close_and_exit:
 			ibuf_delete_for_discarded_space(space_id);
 		}
 
-		purge_sys.check_stop_SYS();
 		mtr.start();
 		index->set_modified(mtr);
 
@@ -640,12 +639,6 @@ row_purge_del_mark(
   return result;
 }
 
-void purge_sys_t::wait_SYS()
-{
-  while (must_wait_SYS())
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-}
-
 void purge_sys_t::wait_FTS()
 {
   while (must_wait_FTS())
@@ -658,7 +651,6 @@ whose old history can no longer be observed.
 @param[in,out]	mtr	mini-transaction (will be started and committed) */
 static void row_purge_reset_trx_id(purge_node_t* node, mtr_t* mtr)
 {
-retry:
 	/* Reset DB_TRX_ID, DB_ROLL_PTR for old records. */
 	mtr->start();
 
@@ -694,17 +686,6 @@ retry:
 			ut_ad(!rec_get_deleted_flag(
 					rec, rec_offs_comp(offsets))
 			      || rec_is_alter_metadata(rec, *index));
-			switch (node->table->id) {
-			case DICT_TABLES_ID:
-			case DICT_COLUMNS_ID:
-			case DICT_INDEXES_ID:
-				if (purge_sys.must_wait_SYS()) {
-					mtr->commit();
-					purge_sys.check_stop_SYS();
-					goto retry;
-				}
-			}
-
 			DBUG_LOG("purge", "reset DB_TRX_ID="
 				 << ib::hex(row_get_rec_trx_id(
 						    rec, index, offsets)));
