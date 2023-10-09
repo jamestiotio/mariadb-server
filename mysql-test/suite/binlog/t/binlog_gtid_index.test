@@ -1,6 +1,9 @@
 # ToDo maybe run for all 3 just to fuss the offsets a bit?
 --source include/have_binlog_format_mixed.inc
 
+SET GLOBAL binlog_gtid_index= 0;
+SET GLOBAL binlog_gtid_index= 1;
+
 --let $file= query_get_value(SHOW MASTER STATUS, File, 1)
 --let $pos1= query_get_value(SHOW MASTER STATUS, Position, 1)
 CREATE TABLE t1 (a INT PRIMARY KEY);
