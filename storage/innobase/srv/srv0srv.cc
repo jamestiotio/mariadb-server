@@ -1317,9 +1317,18 @@ void purge_sys_t::wake_if_not_active()
 }
 
 /** @return whether the purge tasks are active */
-bool purge_sys_t::running() const
+bool purge_sys_t::running()
 {
   return purge_coordinator_task.is_running();
+}
+
+void purge_sys_t::stop_FTS()
+{
+  ddl_latch.rd_lock();
+  m_FTS_paused++;
+  ddl_latch.rd_unlock();
+  while (m_active)
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 }
 
 /** Stop purge during FLUSH TABLES FOR EXPORT */

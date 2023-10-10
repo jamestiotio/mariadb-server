@@ -114,7 +114,6 @@ row_purge_remove_clust_if_poss_low(
 
 	if (table_id) {
 retry:
-		purge_sys.check_stop_FTS();
 		dict_sys.lock(SRW_LOCK_CALL);
 		table = dict_sys.find_table(table_id);
 		if (!table) {
@@ -639,12 +638,6 @@ row_purge_del_mark(
   return result;
 }
 
-void purge_sys_t::wait_FTS()
-{
-  while (must_wait_FTS())
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-}
-
 /** Reset DB_TRX_ID, DB_ROLL_PTR of a clustered index record
 whose old history can no longer be observed.
 @param[in,out]	node	purge node
@@ -1043,8 +1036,7 @@ row_purge_parse_undo_rec(
 	}
 
 	node->table = node->tables[table_id].first;
-	if (node->table == reinterpret_cast<const dict_table_t*>(-1)) {
-		/* TODO: handle this at the end of the batch */
+	if (!node->table) {
 		return false;
 	}
 
@@ -1244,7 +1236,6 @@ row_purge_step(
 
 		row_purge(node, purge_rec.undo_page->page.frame
 			  + uint16_t(purge_rec.roll_ptr), thr);
-		// FIXME: preserve if we could not purge this
 		purge_rec.undo_page->unfix();
 	}
 
