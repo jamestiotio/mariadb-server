@@ -1,7 +1,0 @@
-bug_32831765      : MDEV-32050 FIXME: fails
-concurrent_insert : MDEV-32050 FIXME: hangs
-fulltext          : MDEV-32050 FIXME: hangs occasionally
-fulltext2         : MDEV-32050 FIXME: hangs occasionally
-innodb-fts-ddl    : MDEV-32050 FIXME: fails
-stopword          : MDEV-32050 FIXME: hangs occasionally
-sync_ddl          : MDEV-32050 FIXME: fails

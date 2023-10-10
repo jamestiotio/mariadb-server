@@ -1,2 +1,0 @@
-innodb_defragment_small : MDEV-32050 FIXME: hangs occasionally
-row_format_redundant    : MDEV-32050 FIXME: result difference

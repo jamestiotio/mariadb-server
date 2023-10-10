@@ -145,8 +145,8 @@ private:
   Atomic_counter<uint32_t> m_paused;
   /** number of stop_FTS() calls without resume_FTS() */
   Atomic_counter<uint32_t> m_FTS_paused;
-  /** Latch to stop the view from advancing */
-  srw_lock_low ddl_latch;
+  /** number of stop_SYS() calls without resume_SYS() */
+  Atomic_counter<uint32_t> m_SYS_paused;
 
   /** latch protecting end_view */
   alignas(CPU_LEVEL1_DCACHE_LINESIZE) srw_spin_lock_low end_latch;
@@ -256,11 +256,12 @@ public:
 
   /** Close and reopen all tables in case of a MDL conflict with DDL */
   dict_table_t *close_and_reopen(table_id_t id, THD *thd, MDL_ticket **mdl);
+private:
   /** Suspend purge during a DDL operation on FULLTEXT INDEX tables */
-  void wait_FTS();
-
+  void wait_FTS(bool also_sys);
+public:
   /** Suspend purge in data dictionary tables */
-  void stop_SYS() { ddl_latch.rd_lock(); }
+  void stop_SYS() { m_SYS_paused++; }
   /** Resume purge in data dictionary tables */
   static void resume_SYS(void *);
 
@@ -305,7 +306,7 @@ public:
   void clone_oldest_view()
   {
     if (!also_end_view)
-      wait_FTS();
+      wait_FTS(true);
     latch.wr_lock(SRW_LOCK_CALL);
     trx_sys.clone_oldest_view(&view);
     if (also_end_view)

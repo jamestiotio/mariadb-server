@@ -176,7 +176,6 @@ void purge_sys_t::create()
   hdr_page_no= 0;
   hdr_offset= 0;
   latch.SRW_LOCK_INIT(trx_purge_latch_key);
-  ddl_latch.init();
   end_latch.init();
   mysql_mutex_init(purge_sys_pq_mutex_key, &pq_mutex, nullptr);
   truncate.current= NULL;
@@ -199,7 +198,6 @@ void purge_sys_t::close()
   trx->state= TRX_STATE_NOT_STARTED;
   trx->free();
   latch.destroy();
-  ddl_latch.destroy();
   end_latch.destroy();
   mysql_mutex_destroy(&pq_mutex);
   m_initialized= false;
@@ -1105,14 +1103,14 @@ static void trx_purge_close_tables(purge_node_t *node, THD *thd)
   }
 }
 
-void purge_sys_t::wait_FTS()
+void purge_sys_t::wait_FTS(bool also_sys)
 {
-  uint32_t paused;
+  bool paused;
   do
   {
-    ddl_latch.wr_lock();
-    paused= m_FTS_paused;
-    ddl_latch.wr_unlock();
+    latch.wr_lock(SRW_LOCK_CALL);
+    paused= m_FTS_paused || (also_sys && m_SYS_paused);
+    latch.wr_unlock();
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
   while (paused);
@@ -1224,7 +1222,7 @@ dict_table_t *purge_sys_t::close_and_reopen(table_id_t id, THD *thd,
   }
 
   m_active= false;
-  wait_FTS();
+  wait_FTS(false);
   m_active= true;
 
   dict_table_t *table= trx_purge_table_open(id, mdl_context, mdl);

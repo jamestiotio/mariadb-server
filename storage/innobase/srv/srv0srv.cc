@@ -1297,13 +1297,18 @@ void purge_sys_t::wake_if_not_active()
     else
     {
       purge_coordinator_timer->disarm();
-      ddl_latch.wr_lock();
-      ddl_latch.wr_unlock();
-      latch.wr_lock(SRW_LOCK_CALL);
-      if (purge_state.m_running)
+      for (;;)
       {
+        latch.wr_lock(SRW_LOCK_CALL);
+        if (purge_state.m_running)
+        {
+          latch.wr_unlock();
+          return;
+        }
+        if (!m_SYS_paused)
+          break;
         latch.wr_unlock();
-        return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
       }
       trx_sys.clone_oldest_view(&view);
       const trx_id_t head{this->head.trx_no}, limit= view.low_limit_no();
@@ -1324,9 +1329,9 @@ bool purge_sys_t::running()
 
 void purge_sys_t::stop_FTS()
 {
-  ddl_latch.rd_lock();
+  latch.rd_lock();
   m_FTS_paused++;
-  ddl_latch.rd_unlock();
+  latch.rd_unlock();
   while (m_active)
     std::this_thread::sleep_for(std::chrono::seconds(1));
 }
@@ -1361,7 +1366,8 @@ void purge_sys_t::stop()
 /** Resume purge in data dictionary tables */
 void purge_sys_t::resume_SYS(void *)
 {
-  purge_sys.ddl_latch.rd_unlock();
+  ut_d(auto paused=) purge_sys.m_SYS_paused--;
+  ut_ad(paused);
 }
 
 /** Resume purge at UNLOCK TABLES after FLUSH TABLES FOR EXPORT */
