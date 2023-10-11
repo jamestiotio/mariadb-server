@@ -52,6 +52,7 @@ send INSERT INTO child SET a=5;
 
 connection default;
 SET DEBUG_SYNC='now WAIT_FOR fk';
+SET @save_timeout=@@innodb_lock_wait_timeout;
 SET foreign_key_checks=0, innodb_lock_wait_timeout=0;
 --error ER_LOCK_WAIT_TIMEOUT
 TRUNCATE TABLE parent;
@@ -66,6 +67,7 @@ disconnect dml;
 connection default;
 SET DEBUG_SYNC = RESET;
 
+SET innodb_lock_wait_timeout = @save_timeout;
 DROP TABLE child, parent;
 
 --echo #
