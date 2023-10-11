@@ -68,7 +68,7 @@ int wsrep_is_wsrep_xid(const void* xid_ptr)
             xid->gtrid_length  == WSREP_XID_GTRID_LEN_V_3)));
 }
 
-const unsigned char* wsrep_xid_uuid(const xid_t* xid)
+const unsigned char* wsrep_xid_uuid(const XID* xid)
 {
   DBUG_ASSERT(xid);
   static wsrep::id const undefined;
@@ -85,7 +85,7 @@ const wsrep::id& wsrep_xid_uuid(const XID& xid)
   return *reinterpret_cast<const wsrep::id*>(wsrep_xid_uuid(&xid));
 }
 
-long long wsrep_xid_seqno(const xid_t* xid)
+long long wsrep_xid_seqno(const XID* xid)
 {
   DBUG_ASSERT(xid);
   long long ret= wsrep::seqno::undefined().get();

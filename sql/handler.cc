@@ -2595,7 +2595,7 @@ static bool xarecover_decide_to_commit(xid_recovery_member* member,
 static void xarecover_do_commit_or_rollback(handlerton *hton,
                                             xarecover_complete_arg *arg)
 {
-  xid_t x;
+  XID x;
   my_bool rc;
   xid_recovery_member *member= arg->member;
   Binlog_offset *ptr_commit_max= arg->binlog_coord;

@@ -3816,7 +3816,7 @@ void XA_prepare_log_event::pack_info(Protocol *protocol)
 int XA_prepare_log_event::do_commit()
 {
   int res;
-  xid_t xid;
+  XID xid;
   xid.set(m_xid.formatID,
           m_xid.data, m_xid.gtrid_length,
           m_xid.data + m_xid.gtrid_length, m_xid.bqual_length);
