@@ -1329,7 +1329,7 @@ bool purge_sys_t::running()
 
 void purge_sys_t::stop_FTS()
 {
-  latch.rd_lock();
+  latch.rd_lock(SRW_LOCK_CALL);
   m_FTS_paused++;
   latch.rd_unlock();
   while (m_active)
