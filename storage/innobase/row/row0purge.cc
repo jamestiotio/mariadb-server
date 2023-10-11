@@ -1205,11 +1205,12 @@ inline void purge_node_t::start()
 
 /** Reset the state at end
 @return the query graph parent */
-inline que_node_t *purge_node_t::end()
+inline que_node_t *purge_node_t::end(THD *thd)
 {
   DBUG_ASSERT(common.type == QUE_NODE_PURGE);
   ut_ad(undo_recs.empty());
   ut_d(in_progress= false);
+  innobase_reset_background_thd(thd);
   mem_heap_empty(heap);
   return common.parent;
 }
@@ -1239,7 +1240,7 @@ row_purge_step(
 		purge_rec.undo_page->unfix();
 	}
 
-	thr->run_node = node->end();
+	thr->run_node = node->end(current_thd);
 	return(thr);
 }
 

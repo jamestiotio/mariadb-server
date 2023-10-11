@@ -153,5 +153,5 @@ struct purge_node_t
 
   /** Reset the state at end
   @return the query graph parent */
-  inline que_node_t *end();
+  inline que_node_t *end(THD *);
 };
