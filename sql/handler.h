@@ -890,6 +890,8 @@ typedef ulonglong my_xid; // this line is the same as in log_event.h
 #define COMPATIBLE_DATA_YES 0
 #define COMPATIBLE_DATA_NO  1
 
+struct Online_alter_cache_list;
+
 /**
   struct xid_t is binary compatible with the XID structure as
   in the X/Open CAE Specification, Distributed Transaction Processing:
@@ -903,6 +905,7 @@ struct xid_t {
   long gtrid_length;
   long bqual_length;
   char data[XIDDATASIZE];  // not \0-terminated !
+  Online_alter_cache_list *online_alter_cache;
 
   xid_t() = default;                                /* Remove gcc warning */
   bool eq(struct xid_t *xid) const
