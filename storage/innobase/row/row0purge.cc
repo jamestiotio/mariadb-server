@@ -48,6 +48,7 @@ Created 3/14/1997 Heikki Tuuri
 #include "ha_innodb.h"
 #include "fil0fil.h"
 #include "debug_sync.h"
+#include <mysql/service_thd_mdl.h>
 
 /*************************************************************************
 IMPORTANT NOTE: Any operation that generates redo MUST check that there
@@ -1035,10 +1036,15 @@ row_purge_parse_undo_rec(
 		break;
 	}
 
-	node->table = node->tables[table_id].first;
+	auto &tables_entry= node->tables[table_id];
+	node->table = tables_entry.first;
 	if (!node->table) {
 		return false;
 	}
+
+	auto *mdl_context= (MDL_context*)thd_mdl_context(current_thd);
+	if (tables_entry.second)
+		mdl_context->lock_emissary= tables_entry.second->get_ctx();
 
 	ut_ad(!node->table->is_temporary());
 
@@ -1211,6 +1217,7 @@ inline que_node_t *purge_node_t::end(THD *thd)
   ut_ad(undo_recs.empty());
   ut_d(in_progress= false);
   innobase_reset_background_thd(thd);
+  ((MDL_context*)thd_mdl_context(current_thd))->lock_emissary= nullptr;
   mem_heap_empty(heap);
   return common.parent;
 }
