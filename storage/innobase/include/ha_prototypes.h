@@ -460,7 +460,7 @@ void destroy_background_thd(MYSQL_THD thd);
 /** Close opened tables, free memory, delete items for a MYSQL_THD.
 @param[in]	thd	MYSQL_THD to reset */
 void
-innobase_reset_background_thd(MYSQL_THD, const MYSQL_THD);
+innobase_reset_background_thd(MYSQL_THD);
 
 #ifdef WITH_WSREP
 /** Append table-level exclusive key.

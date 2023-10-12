@@ -1210,12 +1210,7 @@ inline que_node_t *purge_node_t::end(THD *thd)
   DBUG_ASSERT(common.type == QUE_NODE_PURGE);
   ut_ad(undo_recs.empty());
   ut_d(in_progress= false);
-
-  if (table)
-  {
-    MDL_ticket *ticket= tables[table->id].second;
-    innobase_reset_background_thd(thd, ticket ? ticket->get_ctx()->get_thd() : NULL);
-  }
+  innobase_reset_background_thd(thd);
   mem_heap_empty(heap);
   return common.parent;
 }

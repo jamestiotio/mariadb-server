@@ -894,7 +894,7 @@ public:
 
   bool is_lock_owner(MDL_key::enum_mdl_namespace mdl_namespace,
                      const char *db, const char *name,
-                     enum_mdl_type mdl_type) const;
+                     enum_mdl_type mdl_type);
   unsigned long get_lock_owner(MDL_key *mdl_key);
 
   bool has_lock(const MDL_savepoint &mdl_savepoint, MDL_ticket *mdl_ticket);
@@ -1055,7 +1055,7 @@ private:
   uint m_deadlock_overweight= 0;
 private:
   MDL_ticket *find_ticket(MDL_request *mdl_req,
-                          enum_mdl_duration *duration) const;
+                          enum_mdl_duration *duration);
   void release_locks_stored_before(enum_mdl_duration duration, MDL_ticket *sentinel);
   void release_lock(enum_mdl_duration duration, MDL_ticket *ticket);
   bool try_acquire_lock_impl(MDL_request *mdl_request,

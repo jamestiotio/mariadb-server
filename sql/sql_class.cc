@@ -5138,9 +5138,9 @@ void destroy_background_thd(MYSQL_THD thd)
 }
 
 
-void reset_thd(MYSQL_THD thd, const MYSQL_THD lock_owner)
+void reset_thd(MYSQL_THD thd)
 {
-  close_thread_tables(thd, lock_owner);
+  close_thread_tables(thd);
   thd->release_transactional_locks();
   thd->free_items();
   free_root(thd->mem_root, MYF(MY_KEEP_PREALLOC));
