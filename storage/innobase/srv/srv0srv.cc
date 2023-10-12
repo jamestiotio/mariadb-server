@@ -97,10 +97,10 @@ char*	srv_data_home;
 char*	srv_undo_dir;
 
 /** The number of tablespaces to use for rollback segments. */
-ulong	srv_undo_tablespaces;
+uint	srv_undo_tablespaces;
 
 /** The number of UNDO tablespaces that are open and ready to use. */
-ulint	srv_undo_tablespaces_open;
+uint32_t srv_undo_tablespaces_open;
 
 /** The number of UNDO tablespaces that are active (hosting some rollback
 segment). It is quite possible that some of the tablespaces doesn't host

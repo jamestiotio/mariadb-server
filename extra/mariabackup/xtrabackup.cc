@@ -1725,7 +1725,7 @@ struct my_option xb_server_options[] =
   {"innodb_undo_tablespaces", OPT_INNODB_UNDO_TABLESPACES,
    "Number of undo tablespaces to use.",
    (G_PTR*)&srv_undo_tablespaces, (G_PTR*)&srv_undo_tablespaces,
-   0, GET_ULONG, REQUIRED_ARG, 0, 0, 126, 0, 1, 0},
+   0, GET_UINT, REQUIRED_ARG, 0, 0, 126, 0, 1, 0},
 
   {"innodb_compression_level", OPT_INNODB_COMPRESSION_LEVEL,
    "Compression level used for zlib compression.",
@@ -3936,7 +3936,7 @@ static dberr_t xb_assign_undo_space_start()
 	pfs_os_file_t	file;
 	bool		ret;
 	dberr_t		error = DB_SUCCESS;
-	ulint		space;
+	uint32_t	space;
 	int		n_retries = 5;
 	ulint		fsp_flags;
 
@@ -4009,7 +4009,7 @@ static void xb_close_undo_tablespaces()
 {
   if (srv_undo_space_id_start == 0)
     return;
-  for (ulint space_id= srv_undo_space_id_start;
+  for (uint32_t space_id= srv_undo_space_id_start;
        space_id < srv_undo_space_id_start + srv_undo_tablespaces_open;
        space_id++)
   {

@@ -250,7 +250,7 @@ extern bool	srv_was_started;
 extern char*	srv_undo_dir;
 
 /** Number of undo tablespaces to use. */
-extern ulong	srv_undo_tablespaces;
+extern uint	srv_undo_tablespaces;
 
 /** The number of UNDO tablespaces that are active (hosting some rollback
 segment). It is quite possible that some of the tablespaces doesn't host

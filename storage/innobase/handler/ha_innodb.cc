@@ -18314,10 +18314,10 @@ checkpoint_now_set(THD*, st_mysql_sys_var*, void*, const void* save)
 		mysql_mutex_unlock(&LOCK_global_system_variables);
 
 		lsn_t lsn;
-
 		while (log_sys.last_checkpoint_lsn.load(
 			       std::memory_order_acquire)
 		       + SIZE_OF_FILE_CHECKPOINT
+		       + log_sys.framing_size()
 		       < (lsn= log_sys.get_lsn(std::memory_order_acquire))) {
 			log_make_checkpoint();
 			log_sys.log.flush();
@@ -19360,7 +19360,7 @@ static MYSQL_SYSVAR_STR(undo_directory, srv_undo_dir,
   "Directory where undo tablespace files live, this path can be absolute.",
   NULL, NULL, NULL);
 
-static MYSQL_SYSVAR_ULONG(undo_tablespaces, srv_undo_tablespaces,
+static MYSQL_SYSVAR_UINT(undo_tablespaces, srv_undo_tablespaces,
   PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
   "Number of undo tablespaces to use.",
   NULL, NULL,
