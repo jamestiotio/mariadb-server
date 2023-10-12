@@ -43,7 +43,6 @@ SET DEBUG_SYNC='foreign_constraint_check_for_ins SIGNAL fk WAIT_FOR go';
 INSERT INTO child SET a=5;
 connection default;
 SET DEBUG_SYNC='now WAIT_FOR fk';
-SET @save_timeout=@@innodb_lock_wait_timeout;
 SET foreign_key_checks=0, innodb_lock_wait_timeout=0;
 TRUNCATE TABLE parent;
 ERROR HY000: Lock wait timeout exceeded; try restarting transaction
@@ -60,7 +59,6 @@ a
 disconnect dml;
 connection default;
 SET DEBUG_SYNC = RESET;
-SET innodb_lock_wait_timeout = @save_timeout;
 DROP TABLE child, parent;
 #
 # MDEV-24532 Table corruption ER_NO_SUCH_TABLE_IN_ENGINE or
