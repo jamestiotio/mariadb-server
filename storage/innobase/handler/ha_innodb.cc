@@ -121,11 +121,11 @@ void thd_clear_error(MYSQL_THD thd);
 TABLE *find_fk_open_table(THD *thd, const char *db, size_t db_len,
 			  const char *table, size_t table_len);
 MYSQL_THD create_background_thd();
-void reset_thd(MYSQL_THD thd);
+void reset_thd(MYSQL_THD thd, const MYSQL_THD lock_owner);
 TABLE *get_purge_table(THD *thd);
 TABLE *open_purge_table(THD *thd, const char *db, size_t dblen,
 			const char *tb, size_t tblen);
-void close_thread_tables(THD* thd);
+void close_thread_tables(THD* thd, const THD *lock_owner);
 
 #ifdef MYSQL_DYNAMIC_PLUGIN
 #define tc_size  400
@@ -1827,7 +1827,7 @@ MYSQL_THD innobase_create_background_thd(const char* name)
 /** Close opened tables, free memory, delete items for a MYSQL_THD.
 @param[in]	thd	MYSQL_THD to reset */
 void
-innobase_reset_background_thd(MYSQL_THD thd)
+innobase_reset_background_thd(MYSQL_THD thd, const MYSQL_THD lock_owner)
 {
 	if (!thd) {
 		thd = current_thd;
@@ -1838,7 +1838,7 @@ innobase_reset_background_thd(MYSQL_THD thd)
 
 	/* background purge thread */
 	const char *proc_info= thd_proc_info(thd, "reset");
-	reset_thd(thd);
+	reset_thd(thd, lock_owner);
 	thd_proc_info(thd, proc_info);
 }
 

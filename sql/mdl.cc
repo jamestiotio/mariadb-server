@@ -1951,7 +1951,7 @@ const LEX_STRING *MDL_ticket::get_type_name(enum_mdl_type type) const
 
 MDL_ticket *
 MDL_context::find_ticket(MDL_request *mdl_request,
-                         enum_mdl_duration *result_duration)
+                         enum_mdl_duration *result_duration) const
 {
   MDL_ticket *ticket;
   int i;
@@ -3028,7 +3028,7 @@ void MDL_ticket::downgrade_lock(enum_mdl_type type)
 bool
 MDL_context::is_lock_owner(MDL_key::enum_mdl_namespace mdl_namespace,
                            const char *db, const char *name,
-                           enum_mdl_type mdl_type)
+                           enum_mdl_type mdl_type) const
 {
   MDL_request mdl_request;
   enum_mdl_duration not_unused;

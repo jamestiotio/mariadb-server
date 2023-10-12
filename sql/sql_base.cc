@@ -779,6 +779,8 @@ close_all_tables_for_name(THD *thd, TABLE_SHARE *share,
 }
 
 
+void close_thread_table(THD *thd, TABLE **table_ptr, const THD *owner);
+
 /*
   Close all tables used by the current substatement, or all tables
   used by this thread if we are on the upper level.
@@ -797,7 +799,7 @@ close_all_tables_for_name(THD *thd, TABLE_SHARE *share,
     leave prelocked mode if needed.
 */
 
-int close_thread_tables(THD *thd)
+int close_thread_tables(THD *thd, const THD *lock_owner)
 {
   TABLE *table;
   int error= 0;
@@ -953,7 +955,7 @@ int close_thread_tables(THD *thd)
     other thread tries to abort the MERGE lock in between.
   */
   while (thd->open_tables)
-    (void) close_thread_table(thd, &thd->open_tables);
+    (void) close_thread_table(thd, &thd->open_tables, lock_owner);
 
   DBUG_RETURN(error);
 }
@@ -962,6 +964,11 @@ int close_thread_tables(THD *thd)
 /* move one table to free list */
 
 void close_thread_table(THD *thd, TABLE **table_ptr)
+{
+  close_thread_table(thd, table_ptr, thd);
+}
+
+void close_thread_table(THD *thd, TABLE **table_ptr, const THD *owner)
 {
   TABLE *table= *table_ptr;
   handler *file= table->file;
@@ -975,10 +982,10 @@ void close_thread_table(THD *thd, TABLE **table_ptr)
     The metadata lock must be released after giving back
     the table to the table cache.
   */
-  DBUG_ASSERT(thd->mdl_context.is_lock_owner(MDL_key::TABLE,
-                                             table->s->db.str,
-                                             table->s->table_name.str,
-                                             MDL_SHARED));
+  DBUG_ASSERT(owner->mdl_context.is_lock_owner(MDL_key::TABLE,
+                                               table->s->db.str,
+                                               table->s->table_name.str,
+                                               MDL_SHARED));
   table->vcol_cleanup_expr(thd);
   table->mdl_ticket= NULL;
 
