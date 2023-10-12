@@ -1240,7 +1240,11 @@ dict_table_t *purge_sys_t::close_and_reopen(table_id_t id, THD *thd,
         t.second.first= trx_purge_table_open(t.first, mdl_context,
                                              &t.second.second);
         if (t.second.first == reinterpret_cast<dict_table_t*>(-1))
+        {
+          if (table)
+            dict_table_close(table, false, thd, *mdl);
           goto retry;
+        }
       }
     }
   }
