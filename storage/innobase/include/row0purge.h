@@ -80,15 +80,6 @@ row_purge_step(
 	que_thr_t*	thr)	/*!< in: query thread */
 	MY_ATTRIBUTE((nonnull, warn_unused_result));
 
-/** Info required to purge a record */
-struct trx_purge_rec_t
-{
-  /** Undo log page */
-  buf_block_t *undo_page;
-  /** File pointer to undo record, or ~0ULL if the undo log can be skipped */
-  roll_ptr_t roll_ptr;
-};
-
 /** Purge worker context */
 struct purge_node_t
 {

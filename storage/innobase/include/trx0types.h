@@ -93,6 +93,15 @@ struct trx_savept_t{
 	undo_no_t	least_undo_no;	/*!< least undo number to undo */
 };
 
+/** Info required to purge a record */
+struct trx_purge_rec_t
+{
+  /** Undo log record */
+  const byte *undo_rec;
+  /** File pointer to undo record, or ~0ULL if the undo log can be skipped */
+  roll_ptr_t roll_ptr;
+};
+
 /** File objects */
 /* @{ */
 /** Undo segment header */

@@ -1244,9 +1244,7 @@ row_purge_step(
 		node->undo_recs.pop();
 		node->roll_ptr = purge_rec.roll_ptr;
 
-		row_purge(node, purge_rec.undo_page->page.frame
-			  + uint16_t(purge_rec.roll_ptr), thr);
-		purge_rec.undo_page->unfix();
+		row_purge(node, purge_rec.undo_rec, thr);
 	}
 
 	thr->run_node = node->end(current_thd);
