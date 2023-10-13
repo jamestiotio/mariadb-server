@@ -1042,9 +1042,11 @@ row_purge_parse_undo_rec(
 		return false;
 	}
 
+#ifdef UNIV_DEBUG
 	auto *mdl_context= (MDL_context*)thd_mdl_context(current_thd);
 	if (tables_entry.second)
 		mdl_context->lock_emissary= tables_entry.second->get_ctx();
+#endif
 
 	ut_ad(!node->table->is_temporary());
 
@@ -1217,7 +1219,7 @@ inline que_node_t *purge_node_t::end(THD *thd)
   ut_ad(undo_recs.empty());
   ut_d(in_progress= false);
   innobase_reset_background_thd(thd);
-  ((MDL_context*)thd_mdl_context(current_thd))->lock_emissary= nullptr;
+  ut_d(((MDL_context*)thd_mdl_context(current_thd))->lock_emissary= nullptr);
   mem_heap_empty(heap);
   return common.parent;
 }
