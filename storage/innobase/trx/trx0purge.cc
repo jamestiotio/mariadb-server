@@ -826,7 +826,7 @@ not_free:
 buf_block_t *purge_sys_t::get_page(page_id_t id)
 {
   {
-    const auto p{pages.find(id)};
+    const auto p= pages.find(id);
     if (p != pages.end())
       return p->second;
   }
