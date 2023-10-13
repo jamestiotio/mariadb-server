@@ -1832,7 +1832,11 @@ void srv_purge_shutdown()
   if (purge_sys.enabled())
   {
     if (!srv_fast_shutdown && !opt_bootstrap)
+    {
+      srv_purge_batch_size= uint(std::min(size_t{innodb_purge_batch_size_MAX},
+                                          buf_pool.curr_size * 3 / 4));
       srv_update_purge_thread_count(innodb_purge_threads_MAX);
+    }
     size_t history_size= trx_sys.history_size();
     while (!srv_purge_should_exit(history_size))
     {
