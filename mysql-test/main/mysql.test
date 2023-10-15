@@ -735,3 +735,10 @@ drop table t1;
 --echo MYSQL --ssl-verify-server-cert -e "\\s"
 --replace_regex /^.[^S].*// /\b[A-Z_0-9]+,/XXX,/
 --exec $MYSQL --ssl-verify-server-cert -e "\\s"
+
+--echo #
+--echo # MDEV-32473 --disable-ssl doesn't disable it
+--echo #
+--echo MYSQL --ssl-verify-server-cert --disable-ssl -e "\\s"
+--replace_regex /^.[^S].*// /\b[A-Z_0-9]+,/XXX,/
+--exec $MYSQL --ssl-verify-server-cert --disable-ssl -e "\\s"

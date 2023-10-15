@@ -25,3 +25,7 @@ exec $XTRABACKUP --protocol=tcp --user=root --port=$MASTER_MYPORT --backup --tar
 echo # socket ssl ssl-verify-server-cert;
 exec $XTRABACKUP --protocol=socket --user=root --socket=$MASTER_MYSOCK --backup --target-dir=$targetdir;
 rmdir $targetdir;
+# tcp skip-ssl
+# connects fine
+exec $XTRABACKUP --protocol=tcp --user=root --skip-ssl --port=$MASTER_MYPORT --backup --target-dir=$targetdir;
+rmdir $targetdir;

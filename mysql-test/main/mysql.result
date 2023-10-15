@@ -653,3 +653,11 @@ MYSQL --ssl-verify-server-cert -e "\s"
 SSL:			Cipher in use is XXX, cert is OK
 
 
+#
+# MDEV-32473 --disable-ssl doesn't disable it
+#
+MYSQL --ssl-verify-server-cert --disable-ssl -e "\s"
+
+SSL:			Not in use
+
+
