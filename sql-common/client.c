@@ -2030,6 +2030,7 @@ static int send_client_reply_packet(MCPVIO_EXT *mpvio,
 {
   MYSQL *mysql= mpvio->mysql;
   NET *net= &mysql->net;
+  enum enum_vio_type vio_type= net->vio->type;
   char *buff, *end;
   size_t buff_size;
   size_t connect_attrs_len=
@@ -2064,7 +2065,7 @@ static int send_client_reply_packet(MCPVIO_EXT *mpvio,
   if (mpvio->db)
     mysql->client_flag|= CLIENT_CONNECT_WITH_DB;
 
-  if (mysql->net.vio->type == VIO_TYPE_NAMEDPIPE)
+  if (vio_type == VIO_TYPE_NAMEDPIPE)
   {
     mysql->server_capabilities&= ~CLIENT_SSL;
     mysql->options.use_ssl= 0;
@@ -2186,7 +2187,7 @@ static int send_client_reply_packet(MCPVIO_EXT *mpvio,
 
         Otherwise one last cert check after auth.
       */
-      if (mysql->net.vio->type == VIO_TYPE_SOCKET)
+      if (vio_type == VIO_TYPE_SOCKET)
         mysql->tls_self_signed_error= 0;
       else if (!mysql->passwd || !mysql->passwd[0] ||
                !mpvio->plugin->hash_password_bin)
