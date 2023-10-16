@@ -162,9 +162,15 @@ private:
   };
 
   using unordered_map =
-    std::unordered_map<const page_id_t, buf_block_t*,
-                       hasher, std::equal_to<page_id_t>,
-                       ut_allocator<std::pair<const page_id_t, buf_block_t*>>>;
+    std::unordered_map<const page_id_t, buf_block_t*, hasher,
+#if defined __GNUC__ && __GNUC__ == 4 && __GNUC_MINOR__ >= 8
+                       std::equal_to<page_id_t>
+                       /* GCC 4.8.5 would fail to find a matching allocator */
+#else
+                       std::equal_to<page_id_t>,
+                       ut_allocator<std::pair<const page_id_t, buf_block_t*>>
+#endif
+                       >;
   /** map of buffer-fixed undo log pages processed during a purge batch */
   unordered_map pages;
 public:
