@@ -1227,6 +1227,14 @@ SQL_SELECT::SQL_SELECT() :quick(0),cond(0),pre_idx_push_select_cond(NULL),free_c
   my_b_clear(&file);
 }
 
+bool SQL_SELECT::check_quick(THD *thd, bool force_quick_range, ha_rows limit)
+{
+  key_map tmp;
+  tmp.set_all();
+  Json_writer_object trace_wrapper(thd);
+  return test_quick_select(thd, tmp, 0, limit, force_quick_range,
+                           FALSE, FALSE, FALSE) < 0;
+}
 
 void SQL_SELECT::cleanup()
 {
@@ -2702,7 +2710,7 @@ int SQL_SELECT::test_quick_select(THD *thd, key_map keys_to_use,
 
   DBUG_PRINT("info",("Time to scan table: %g", read_time));
 
-  Json_writer_object table_records(thd);
+  Json_writer_object table_records(thd, "test_quick_select");
   table_records.add_table_name(head);
 
   Json_writer_object trace_range(thd, "range_analysis");

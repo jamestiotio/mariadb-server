@@ -4867,6 +4867,7 @@ static ha_rows get_quick_record_count(THD *thd, SQL_SELECT *select,
   {
     select->head=table;
     table->reginfo.impossible_range=0;
+    Json_writer_object trace_wrapper(thd);
     if (likely((error=
                 select->test_quick_select(thd, *(key_map *)keys,
                                           (table_map) 0,
@@ -23613,11 +23614,17 @@ test_if_skip_sort_order(JOIN_TAB *tab,ORDER *order,ha_rows select_limit,
   /* Check that we are always called with first non-const table */
   DBUG_ASSERT(tab == tab->join->join_tab + tab->join->const_tables);
 
+  Json_writer_object trace_wrapper(tab->join->thd);
+  Json_writer_object opt_trace(
+      tab->join->thd, "reconsidering_access_paths_for_index_ordering");
+
   /* Sorting a single row can always be skipped */
   if (tab->type == JT_EQ_REF ||
       tab->type == JT_CONST  ||
       tab->type == JT_SYSTEM)
   {
+    opt_trace.add("retval=1",
+                  "JT_EQ_REF/JT_CONST/JT_SYSTEM doesn't require sorting");
     DBUG_RETURN(1);
   }
 
@@ -23634,6 +23641,8 @@ test_if_skip_sort_order(JOIN_TAB *tab,ORDER *order,ha_rows select_limit,
     if (item->type() != Item::FIELD_ITEM)
     {
       usable_keys.clear_all();
+      opt_trace.add("retval=0",
+                    "ORDER/GROUP BY contains not only Item::FIELD_ITEM's");
       DBUG_RETURN(0);
     }
 
@@ -23658,7 +23667,10 @@ test_if_skip_sort_order(JOIN_TAB *tab,ORDER *order,ha_rows select_limit,
                                         &col_keys);
     usable_keys.intersect(col_keys);
     if (usable_keys.is_clear_all())
-      goto use_filesort;                        // No usable keys
+    {
+      opt_trace.add("retval=0", "No usable keys");
+      goto use_filesort;
+    }
   }
 
   ref_key= -1;
@@ -23673,7 +23685,11 @@ test_if_skip_sort_order(JOIN_TAB *tab,ORDER *order,ha_rows select_limit,
     */
     if (tab->type == JT_REF_OR_NULL || tab->type == JT_FT ||
         tab->ref.uses_splitting)
+    {
+      opt_trace.add("retval=0",
+                    "JT_REF_OR_NULL/JT_FT or uses_splitting");
       goto use_filesort;
+    }
   }
   else if (select && select->quick)		// Range found by opt_range
   {
@@ -23773,6 +23789,9 @@ test_if_skip_sort_order(JOIN_TAB *tab,ORDER *order,ha_rows select_limit,
           if (res)
           {
             select->cond= save_cond;
+            opt_trace.add(
+                  "retval=0",
+                  "test_quick_select failed (error or impossible SELECT)");
             goto use_filesort;
           }
           DBUG_ASSERT(tab->select->quick);
@@ -29022,9 +29041,8 @@ test_if_cheaper_ordering(const JOIN_TAB *tab, ORDER *order, TABLE *table,
   const bool has_limit= (select_limit_arg != HA_POS_ERROR);
   THD* thd= join ? join->thd : table->in_use;
 
-  Json_writer_object trace_wrapper(thd);
   Json_writer_object trace_cheaper_ordering(
-      thd, "reconsidering_access_paths_for_index_ordering");
+      thd, "searching_for_cheaper_access_key_than_given");
   trace_cheaper_ordering.add("clause", group ? "GROUP BY" : "ORDER BY");
 
   /*

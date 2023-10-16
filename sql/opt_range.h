@@ -38,6 +38,7 @@
 
 class JOIN;
 class Item_sum;
+class Json_writer_object;
 
 struct KEY_PART {
   uint16           key,part;
@@ -1647,13 +1648,7 @@ class SQL_SELECT :public Sql_alloc {
   ~SQL_SELECT();
   void cleanup();
   void set_quick(QUICK_SELECT_I *new_quick) { delete quick; quick= new_quick; }
-  bool check_quick(THD *thd, bool force_quick_range, ha_rows limit)
-  {
-    key_map tmp;
-    tmp.set_all();
-    return test_quick_select(thd, tmp, 0, limit, force_quick_range,
-                             FALSE, FALSE, FALSE) < 0;
-  }
+  bool check_quick(THD *thd, bool force_quick_range, ha_rows limit);
   /* 
     RETURN
       0   if record must be skipped <-> (cond && cond->val_int() == 0)
