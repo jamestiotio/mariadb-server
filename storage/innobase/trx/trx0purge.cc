@@ -825,25 +825,26 @@ not_free:
 
 buf_block_t *purge_sys_t::get_page(page_id_t id)
 {
-  {
-    const auto p= pages.find(id);
-    if (p != pages.end())
-      return p->second;
-  }
+  buf_block_t*& undo_page= pages[id];
+
+  if (undo_page)
+    return undo_page;
 
   mtr_t mtr;
   mtr.start();
-  buf_block_t* undo_page=
+  undo_page=
     buf_page_get_gen(id, 0, RW_S_LATCH, nullptr, BUF_GET_POSSIBLY_FREED, &mtr);
 
-  if (undo_page)
+  if (UNIV_LIKELY(undo_page != nullptr))
   {
-    pages.emplace(id, undo_page);
     undo_page->fix();
+    mtr.commit();
+    return undo_page;
   }
 
   mtr.commit();
-  return undo_page;
+  pages.erase(id);
+  return nullptr;
 }
 
 void purge_sys_t::rseg_get_next_history_log()
