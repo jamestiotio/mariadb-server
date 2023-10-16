@@ -94,15 +94,6 @@ struct trx_savept_t{
 	undo_no_t	least_undo_no;	/*!< least undo number to undo */
 };
 
-/** Info required to purge a record */
-struct trx_purge_rec_t
-{
-  /** Undo log record */
-  const byte *undo_rec;
-  /** File pointer to undo record, or ~0ULL if the undo log can be skipped */
-  roll_ptr_t roll_ptr;
-};
-
 /** File objects */
 /* @{ */
 /** Undo segment header */
@@ -116,6 +107,15 @@ typedef byte	trx_upagef_t;
 typedef	byte	trx_undo_rec_t;
 
 /* @} */
+
+/** Info required to purge a record */
+struct trx_purge_rec_t
+{
+  /** Undo log record, or nullptr (roll_ptr!=0 if the log can be skipped) */
+  const trx_undo_rec_t *undo_rec;
+  /** File pointer to undo_rec */
+  roll_ptr_t roll_ptr;
+};
 
 typedef std::vector<trx_id_t, ut_allocator<trx_id_t> >	trx_ids_t;
 

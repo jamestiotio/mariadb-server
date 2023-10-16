@@ -1311,9 +1311,9 @@ void purge_sys_t::wake_if_not_active()
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
       }
       trx_sys.clone_oldest_view(&view);
-      const trx_id_t head{this->head.trx_no}, limit= view.low_limit_no();
+      const trx_id_t purged= head.trx_no, limit= view.low_limit_no();
       latch.wr_unlock();
-      if (head > limit)
+      if (purged > limit)
         return;
     }
     if (++purge_state.m_running == 1)

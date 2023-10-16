@@ -963,8 +963,8 @@ bool purge_sys_t::choose_next_log()
 Get the next record to purge and update the info in the purge system.
 @param roll_ptr           undo log pointer to the record
 @return buffer-fixed reference to undo log record
-@retval {nullptr,~0ULL} if the whole undo log can skipped in purge
-@retval {nullptr,0}  if nothing is left, or on corruption */
+@retval {nullptr,1} if the whole undo log can skipped in purge
+@retval {nullptr,0} if nothing is left, or on corruption */
 inline trx_purge_rec_t purge_sys_t::get_next_rec(roll_ptr_t roll_ptr)
 {
   ut_ad(next_stored);
@@ -982,7 +982,7 @@ inline trx_purge_rec_t purge_sys_t::get_next_rec(roll_ptr_t roll_ptr)
 
     /* Look for the next undo log and record to purge */
     choose_next_log();
-    return {nullptr, ~0ULL};
+    return {nullptr, 1};
   }
 
   ut_ad(offset == uint16_t(roll_ptr));
@@ -1307,7 +1307,7 @@ trx_purge_attach_undo_recs(ulint n_purge_threads, THD *thd)
 			if (!purge_rec.roll_ptr) {
 				break;
 			}
-			ut_ad(!~purge_rec.roll_ptr);
+			ut_ad(purge_rec.roll_ptr == 1);
 			continue;
 		}
 

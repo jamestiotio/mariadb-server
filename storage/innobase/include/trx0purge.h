@@ -145,10 +145,10 @@ public:
 private:
   /** number of pending stop() calls without resume() */
   Atomic_counter<uint32_t> m_paused;
-  /** number of stop_FTS() calls without resume_FTS() */
-  Atomic_counter<uint32_t> m_FTS_paused;
   /** number of stop_SYS() calls without resume_SYS() */
   Atomic_counter<uint32_t> m_SYS_paused;
+  /** number of stop_FTS() calls without resume_FTS() */
+  Atomic_counter<uint32_t> m_FTS_paused;
 
   /** latch protecting end_view */
   alignas(CPU_LEVEL1_DCACHE_LINESIZE) srw_spin_lock_low end_latch;
@@ -307,8 +307,8 @@ private:
   Get the next record to purge and update the info in the purge system.
   @param roll_ptr           undo log pointer to the record
   @return buffer-fixed reference to undo log record
-  @retval {nullptr,~0ULL} if the whole undo log can skipped in purge
-  @retval {nullptr,0}  if nothing is left, or on corruption */
+  @retval {nullptr,1} if the whole undo log can skipped in purge
+  @retval {nullptr,0} if nothing is left, or on corruption */
   inline trx_purge_rec_t get_next_rec(roll_ptr_t roll_ptr);
 
   /** Choose the next undo log to purge.
@@ -324,8 +324,8 @@ public:
   /**
   Fetch the next undo log record from the history list to purge.
   @return buffer-fixed reference to undo log record
-  @retval {nullptr,-1} if the whole undo log can skipped in purge
-  @retval {nullptr,0}  if nothing is left, or on corruption */
+  @retval {nullptr,1} if the whole undo log can skipped in purge
+  @retval {nullptr,0} if nothing is left, or on corruption */
   inline trx_purge_rec_t fetch_next_rec();
 
   /** Determine if the history of a transaction is purgeable.
