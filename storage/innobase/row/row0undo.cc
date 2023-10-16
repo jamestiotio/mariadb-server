@@ -218,7 +218,7 @@ row_undo_search_clust_to_pcur(
 		log, first mark them DATA_MISSING. So we will know if the
 		value gets updated */
 		if (node->table->n_v_cols
-		    && !(node->roll_ptr >> ROLL_PTR_INSERT_FLAG_POS)
+		    && !trx_undo_roll_ptr_is_insert(node->roll_ptr)
 		    && !(node->cmpl_info & UPD_NODE_NO_ORD_CHANGE)) {
 			for (ulint i = 0;
 			     i < dict_table_get_n_v_cols(node->table); i++) {
@@ -393,7 +393,7 @@ row_undo(
 		return DB_SUCCESS;
 	}
 
-	dberr_t err = (node->roll_ptr >> ROLL_PTR_INSERT_FLAG_POS)
+	dberr_t err = trx_undo_roll_ptr_is_insert(node->roll_ptr)
 		? row_undo_ins(node, thr) : row_undo_mod(node, thr);
 	undo_page->unfix();
 	btr_pcur_close(&(node->pcur));

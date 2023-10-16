@@ -1085,7 +1085,6 @@ static bool row_undo_mod_parse_undo_rec(undo_node_t* node, bool dict_locked)
 	byte		cmpl_info;
 	bool		dummy_extern;
 
-	ut_ad(!(node->roll_ptr >> ROLL_PTR_INSERT_FLAG_POS));
 	ut_ad(node->trx->in_rollback);
 	ut_ad(!trx_undo_roll_ptr_is_insert(node->roll_ptr));
 
