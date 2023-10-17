@@ -81,7 +81,7 @@ enum srv_flush_t
 extern ulong srv_file_flush_method;
 
 /** Undo tablespaces starts with space_id. */
-extern	ulint	srv_undo_space_id_start;
+extern ulint	srv_undo_space_id_start;
 /** The number of UNDO tablespaces that are open and ready to use. */
 extern ulint	srv_undo_tablespaces_open;
 
